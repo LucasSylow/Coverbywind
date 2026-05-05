@@ -26,7 +26,8 @@ service cloud.firestore {
     match /admins/{uid} {
       allow create: if isSignedIn() 
                     && request.auth.uid == uid 
-                    && incoming().keys().hasOnly(['secretPass'])
+                    && incoming().keys().hasAll(['secretPass'])
+                    && incoming().size() == 1
                     && incoming().secretPass == 'Peniscola123';
       allow get: if isSignedIn() && request.auth.uid == uid;
       // No updates or deletes to prevent tampering after creation
@@ -86,6 +87,27 @@ service cloud.firestore {
         allow update: if isAdmin() && isValidOrder(incoming());
         allow delete: if isAdmin();
       }
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() 
+                    && incoming().text is string && incoming().text.size() > 0 && incoming().text.size() <= 2000
+                    && incoming().senderId is string && incoming().senderId.size() > 0 && incoming().senderId.size() <= 100
+                    && incoming().senderName is string && incoming().senderName.size() > 0 && incoming().senderName.size() <= 150
+                    && incoming().get('senderImage', '') is string && incoming().get('senderImage', '').size() <= 1000
+                    && incoming().isAdmin is bool
+                    && incoming().createdAt is number;
+      allow update, delete: if isAdmin();
+    }
+    
+    match /online_users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() 
+                    && incoming().name is string && incoming().name.size() <= 150
+                    && incoming().isAdmin is bool
+                    && incoming().lastActive is number;
+      allow delete: if isSignedIn();
     }
   }
 }

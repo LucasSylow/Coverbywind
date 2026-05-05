@@ -1,6 +1,10 @@
 import { ArrowRight, Infinity, Percent, Users } from "lucide-react";
+import { useState } from "react";
+import OrderPopup from "../components/OrderPopup";
 
 export default function Yearly() {
+  const [isOrderPopupOpen, setIsOrderPopupOpen] = useState(false);
+
   return (
     <div className="pt-16 pb-24 max-w-4xl mx-auto px-4">
       <div className="text-center mb-16 relative">
@@ -27,15 +31,13 @@ export default function Yearly() {
           </div>
           
           <div className="mt-auto md:mt-0">
-            <a 
-              href="https://www.instagram.com/coverbywind/"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button 
+              onClick={() => setIsOrderPopupOpen(true)}
               className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-[0.98]"
             >
               <span>Tilmeld abonnement</span>
               <ArrowRight className="w-5 h-5" />
-            </a>
+            </button>
           </div>
         </div>
 
@@ -81,6 +83,8 @@ export default function Yearly() {
           </ul>
         </div>
       </div>
+
+      <OrderPopup isOpen={isOrderPopupOpen} onClose={() => setIsOrderPopupOpen(false)} />
     </div>
   );
 }

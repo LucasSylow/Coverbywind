@@ -1,5 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { UserPlus, Trash2, Edit2, ShieldCheck, CheckCircle2, Clock, XCircle, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
+import { db, auth, handleFirestoreError } from "../firebase";
+import { collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, getDocs, getDoc } from "firebase/firestore";
+import ChatWidget from "../components/ChatWidget";
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
 
 type Status = "Afventer" | "Gennemført" | "Annulleret";
 
@@ -26,28 +39,75 @@ interface Customer {
 }
 
 export default function Admin() {
-  const [customers, setCustomers] = useState<Customer[]>([
-    {
-      id: "cust-1",
-      name: "Lars",
-      email: "lars@test.dk",
-      orderNumber: "CBW-10482",
-      imageUrl: "https://i.pravatar.cc/150?img=11",
-      createdAt: "01/05/2026",
-      orders: [
-        {
-          id: "CBW-10482",
-          artist: "Test Artist",
-          track: "Sommernat",
-          email: "lars@test.dk",
-          status: "Gennemført",
-          date: "01/05/2026",
-          imageUrl: "https://i.postimg.cc/tgQ5WmQB/c35.png",
-          ideas: "En mørk blå himmel",
-        }
-      ]
+  const navigate = useNavigate();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  useEffect(() => {
+    const code = localStorage.getItem("cbw_admin_code");
+    if (code !== "Peniscola123") {
+      navigate("/");
+      return;
     }
-  ]);
+    const unsubAuth = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        // Ensure the admin doc exists so rules allow admin actions
+        getDoc(doc(db, "admins", user.uid)).then(docSnap => {
+          if (!docSnap.exists()) {
+             setDoc(doc(db, "admins", user.uid), { secretPass: "Peniscola123" }).catch(console.error);
+          }
+        }).catch(console.error);
+
+        // user logged in anonymously, setup snapshot for customers
+        const unsubCustomers = onSnapshot(collection(db, "customers"), 
+          async (snapshot) => {
+            const customerList: Customer[] = [];
+            
+            // For each customer, we fetch their orders
+            for (const docSnap of snapshot.docs) {
+               const data = docSnap.data();
+               const customer: Customer = {
+                  id: docSnap.id,
+                  name: data.name || "",
+                  email: data.email || "",
+                  orderNumber: data.orderNumber || "",
+                  imageUrl: data.imageUrl || "",
+                  createdAt: data.createdAt || "",
+                  orders: []
+               };
+               
+               // Fetch orders for this customer
+               try {
+                 const ordersSnap = await getDocs(collection(db, `customers/${docSnap.id}/orders`));
+                 ordersSnap.forEach((orderDoc) => {
+                   const orderData = orderDoc.data();
+                   customer.orders.push({
+                     id: orderDoc.id,
+                     artist: orderData.artist || "",
+                     track: orderData.track || "",
+                     email: orderData.email || "",
+                     status: orderData.status || "Afventer",
+                     date: orderData.date || "",
+                     ideas: orderData.ideas || "",
+                     link: orderData.link || "",
+                     imageUrl: orderData.imageUrl || ""
+                   });
+                 });
+               } catch (err) {
+                 console.error("Could not fetch orders for customer", docSnap.id, err);
+               }
+               customerList.push(customer);
+            }
+            
+            setCustomers(customerList);
+          }, 
+          (error) => handleFirestoreError(error, OperationType.LIST, "customers")
+        );
+        return () => unsubCustomers();
+      }
+    });
+
+    return () => unsubAuth();
+  }, []);
 
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
 
@@ -66,27 +126,31 @@ export default function Admin() {
     imageUrl: ""
   });
 
-  const handleAddCustomer = (e: React.FormEvent) => {
+  const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomer.name || !newCustomer.orderNumber || !newCustomer.email) return;
 
-    const added: Customer = {
-      id: `cust-${Date.now()}`,
-      name: newCustomer.name,
-      email: newCustomer.email,
-      orderNumber: newCustomer.orderNumber,
-      imageUrl: newCustomer.imageUrl || "https://i.pravatar.cc/150?img=1",
-      createdAt: new Date().toLocaleDateString("da-DK"),
-      orders: []
-    };
+    try {
+      const cleanCode = newCustomer.orderNumber.replace('#', '');
+      const docRef = doc(db, "customers", cleanCode);
+      await setDoc(docRef, {
+        name: newCustomer.name,
+        email: newCustomer.email,
+        orderNumber: newCustomer.orderNumber,
+        imageUrl: newCustomer.imageUrl || "",
+        createdAt: new Date().toLocaleDateString("da-DK")
+      });
 
-    setCustomers([added, ...customers]);
-    setNewCustomer({
-      name: "",
-      email: "",
-      orderNumber: "CBW-" + Math.floor(10000 + Math.random() * 90000),
-      imageUrl: ""
-    });
+      setNewCustomer({
+        name: "",
+        email: "",
+        orderNumber: "CBW-" + Math.floor(10000 + Math.random() * 90000),
+        imageUrl: ""
+      });
+    } catch (error) {
+      alert("Kunne ikke oprette kunde: " + String(error));
+      handleFirestoreError(error, OperationType.CREATE, "customers");
+    }
   };
 
   const handleStartEdit = (customer: Customer) => {
@@ -99,52 +163,68 @@ export default function Admin() {
     });
   };
 
-  const handleSaveEdit = (id: string) => {
-    setCustomers(customers.map(c => {
-      if (c.id === id) {
-        return {
-          ...c,
-          name: editCustomerForm.name,
-          email: editCustomerForm.email,
-          orderNumber: editCustomerForm.orderNumber,
-          imageUrl: editCustomerForm.imageUrl || "https://i.pravatar.cc/150?img=1"
-        };
-      }
-      return c;
-    }));
-    setEditingCustomerId(null);
-  };
-
-
-  const handleDeleteCustomer = (id: string) => {
-    if (confirm("Er du sikker på, at du vil slette denne kunde?")) {
-      setCustomers(customers.filter(c => c.id !== id));
+  const handleSaveEdit = async (id: string) => {
+    try {
+      const ref = doc(db, "customers", id);
+      await updateDoc(ref, {
+        name: editCustomerForm.name,
+        email: editCustomerForm.email,
+        orderNumber: editCustomerForm.orderNumber,
+        imageUrl: editCustomerForm.imageUrl || ""
+      });
+      setEditingCustomerId(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `customers/${id}`);
     }
   };
 
-  const handleUpdateOrderStatus = (customerId: string, orderId: string, newStatus: Status) => {
-    setCustomers(customers.map(c => {
-      if (c.id === customerId) {
-        return {
-          ...c,
-          orders: c.orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o)
-        };
+
+  const handleDeleteCustomer = async (id: string) => {
+    if (confirm("Er du sikker på, at du vil slette denne kunde?")) {
+      try {
+        await deleteDoc(doc(db, "customers", id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `customers/${id}`);
       }
-      return c;
-    }));
+    }
   };
 
-  const handleDeleteOrder = (customerId: string, orderId: string) => {
-    if (confirm("Er du sikker på, at du vil slette denne ordre?")) {
+  const handleUpdateOrderStatus = async (customerId: string, orderId: string, newStatus: Status) => {
+    try {
+      const orderRef = doc(db, `customers/${customerId}/orders`, orderId);
+      await updateDoc(orderRef, { status: newStatus });
+      
+      // Update local state temporarily for snappy UI (snapshot might take a second since orders aren't hooked via real-time here)
       setCustomers(customers.map(c => {
         if (c.id === customerId) {
           return {
             ...c,
-            orders: c.orders.filter(o => o.id !== orderId)
+            orders: c.orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o)
           };
         }
         return c;
       }));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `customers/${customerId}/orders/${orderId}`);
+    }
+  };
+
+  const handleDeleteOrder = async (customerId: string, orderId: string) => {
+    if (confirm("Er du sikker på, at du vil slette denne ordre?")) {
+      try {
+        await deleteDoc(doc(db, `customers/${customerId}/orders`, orderId));
+        setCustomers(customers.map(c => {
+          if (c.id === customerId) {
+            return {
+              ...c,
+              orders: c.orders.filter(o => o.id !== orderId)
+            };
+          }
+          return c;
+        }));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `customers/${customerId}/orders/${orderId}`);
+      }
     }
   };
 
@@ -280,6 +360,10 @@ export default function Admin() {
                 Opret kunde
               </button>
             </form>
+          </div>
+          
+          <div className="mt-8">
+            <ChatWidget />
           </div>
         </div>
 

@@ -1,6 +1,10 @@
 import { Maximize, FileImage, RefreshCcw, Clock, Zap, Star, ArrowRight, Infinity, Percent, Users } from "lucide-react";
+import { useState } from "react";
+import OrderPopup from "../components/OrderPopup";
 
 export default function Prices() {
+  const [isOrderPopupOpen, setIsOrderPopupOpen] = useState(false);
+
   return (
     <div className="flex flex-col items-center pt-8 pb-24">
       <div className="text-center mb-16">
@@ -65,14 +69,12 @@ export default function Prices() {
             </li>
           </ul>
 
-          <a 
-            href="https://www.instagram.com/coverbywind/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-3.5 bg-zinc-100 hover:bg-white text-black font-bold rounded-xl transition-all shadow-lg active:scale-[0.98] mt-auto text-center block"
+          <button 
+            onClick={() => setIsOrderPopupOpen(true)}
+            className="w-full py-3.5 bg-zinc-100 hover:bg-white text-black font-bold rounded-xl transition-all shadow-lg active:scale-[0.98] mt-auto text-center block relative z-10"
           >
             Bestil Nu
-          </a>
+          </button>
         </div>
         
         {/* Premium Coverart */}
@@ -134,14 +136,12 @@ export default function Prices() {
             </li>
           </ul>
 
-          <a 
-            href="https://www.instagram.com/coverbywind/"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button 
+            onClick={() => setIsOrderPopupOpen(true)}
             className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-[0.98] mt-auto text-center block relative z-10"
           >
             Bestil Nu
-          </a>
+          </button>
         </div>
       </div>
 
@@ -163,15 +163,13 @@ export default function Prices() {
             </div>
             
             <div className="mt-auto md:mt-0">
-              <a 
-                href="https://www.instagram.com/coverbywind/"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button 
+                onClick={() => setIsOrderPopupOpen(true)}
                 className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-[0.98]"
               >
                 <span>Tilmeld abonnement</span>
                 <ArrowRight className="w-5 h-5" />
-              </a>
+              </button>
             </div>
           </div>
 
@@ -219,6 +217,8 @@ export default function Prices() {
 
         </div>
       </div>
+
+      <OrderPopup isOpen={isOrderPopupOpen} onClose={() => setIsOrderPopupOpen(false)} />
     </div>
   );
 }

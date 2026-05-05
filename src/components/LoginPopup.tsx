@@ -2,27 +2,57 @@ import { X, ArrowRight, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
+import { db, auth, handleFirestoreError } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+
+enum OperationType {
+  GET = 'get',
+  WRITE = 'write'
+}
 
 export default function LoginPopup({ onClose }: { onClose: () => void }) {
   const [orderNumber, setOrderNumber] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!orderNumber) return;
+    
     setIsLoading(true);
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
-      onClose();
+    setErrorMsg(null);
+    try {
       if (orderNumber === "Peniscola123") {
+        if (auth.currentUser) {
+          try {
+            await setDoc(doc(db, "admins", auth.currentUser.uid), { secretPass: "Peniscola123" });
+          } catch (err) {
+            // might already be admin or fail
+          }
+        }
         localStorage.setItem("cbw_admin_code", orderNumber);
         navigate("/admin");
+        onClose();
       } else {
-        localStorage.setItem("cbw_customer_code", orderNumber.replace('#', ''));
-        navigate("/dashboard");
+        const cleanCode = orderNumber.replace('#', '');
+        const docRef = doc(db, "customers", cleanCode);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          localStorage.setItem("cbw_customer_code", cleanCode);
+          navigate("/dashboard");
+          onClose();
+        } else {
+          setErrorMsg("Ordrenummer ikke fundet i vores system.");
+        }
       }
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Der skete en fejl. Prøv venligst igen.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -62,6 +92,11 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {errorMsg && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-500 text-sm px-4 py-3 rounded-xl">
+              {errorMsg}
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <label htmlFor="orderNumber" className="text-sm font-medium text-zinc-300">
               Ordrenummer

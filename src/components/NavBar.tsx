@@ -47,12 +47,12 @@ export default function NavBar({ onLoginClick }: { onLoginClick: () => void }) {
             <span>Log ind</span>
           </button>
           
-          <button className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold flex items-center gap-2 pl-5 pr-1.5 py-1.5 rounded-full transition-colors">
+          <Link to="/priser" className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold flex items-center gap-2 pl-5 pr-1.5 py-1.5 rounded-full transition-colors">
             <span>Bestil nu</span>
             <div className="bg-black/25 p-1 rounded-full">
               <ArrowUpRight className="w-4 h-4" />
             </div>
-          </button>
+          </Link>
         </div>
 
         {/* Mobile menu button */}

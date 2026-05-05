@@ -1,5 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon } from "lucide-react";
+import { db, auth, handleFirestoreError } from "../firebase";
+import { collection, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
+import ChatWidget from "../components/ChatWidget";
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
 
 type Status = "Afventer" | "Gennemført" | "Annulleret";
 
@@ -13,30 +26,61 @@ interface Cover {
 }
 
 export default function Dashboard() {
-  const [covers, setCovers] = useState<Cover[]>([
-    {
-      id: "CBW-10482",
-      artist: "Test Artist",
-      track: "Sommernat",
-      status: "Gennemført",
-      date: "01/05/2026",
-      imageUrl: "https://i.postimg.cc/tgQ5WmQB/c35.png",
-    },
-    {
-      id: "CBW-10483",
-      artist: "Test Artist",
-      track: "Mørket",
-      status: "Annulleret",
-      date: "02/05/2026",
-    },
-    {
-      id: "CBW-10484",
-      artist: "Test Artist",
-      track: "Fremtiden",
-      status: "Afventer",
-      date: "04/05/2026",
-    },
-  ]);
+  const navigate = useNavigate();
+  const [covers, setCovers] = useState<Cover[]>([]);
+  const [customerInfo, setCustomerInfo] = useState<{name: string, orderNumber: string, imageUrl: string} | null>(null);
+
+  useEffect(() => {
+    const code = localStorage.getItem("cbw_customer_code");
+    if (!code) {
+      navigate("/");
+      return;
+    }
+    
+    const unsubAuth = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, "customers", code);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+             const data = docSnap.data();
+             setCustomerInfo({
+               name: data.name || "Kunde",
+               orderNumber: data.orderNumber || code,
+               imageUrl: data.imageUrl || "https://i.pravatar.cc/150?img=11"
+             });
+          } else {
+             localStorage.removeItem("cbw_customer_code");
+             navigate("/");
+             return;
+          }
+          
+          const unsubOrders = onSnapshot(collection(db, `customers/${code}/orders`), (snapshot) => {
+            const list: Cover[] = [];
+            snapshot.docs.forEach(d => {
+               const data = d.data();
+               list.push({
+                 id: d.id,
+                 artist: data.artist || "",
+                 track: data.track || "",
+                 status: data.status || "Afventer",
+                 date: data.date || "",
+                 imageUrl: data.imageUrl || ""
+               });
+            });
+            // basic sort: newest first assume created format allows sort
+            setCovers(list.reverse());
+          }, err => handleFirestoreError(err, OperationType.LIST, `customers/${code}/orders`));
+          
+          return () => unsubOrders();
+        } catch (err) {
+           console.error("Error loading dashboard", err);
+        }
+      }
+    });
+
+    return () => unsubAuth();
+  }, [navigate]);
 
   const [newOrder, setNewOrder] = useState({
     artist: "",
@@ -47,21 +91,30 @@ export default function Dashboard() {
   });
   const [orderSuccess, setOrderSuccess] = useState(false);
 
-  const handleOrderSubmit = (e: React.FormEvent) => {
+  const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCoverItem: Cover = {
-      id: `CBW-${Math.floor(10000 + Math.random() * 90000)}`,
-      artist: newOrder.artist,
-      track: newOrder.track,
-      status: "Afventer",
-      date: new Date().toLocaleDateString("da-DK"),
-    };
-    
-    setCovers([newCoverItem, ...covers]);
-    setNewOrder({ artist: "", track: "", email: "", ideas: "", link: "" });
-    // In a real app, this would send data to the backend.
-    setOrderSuccess(true);
-    setTimeout(() => setOrderSuccess(false), 5000);
+    const code = localStorage.getItem("cbw_customer_code");
+    if (!code) return;
+
+    try {
+      const orderId = `CBW-${Math.floor(10000 + Math.random() * 90000)}`;
+      await setDoc(doc(db, `customers/${code}/orders`, orderId), {
+        artist: newOrder.artist,
+        track: newOrder.track,
+        email: newOrder.email,
+        status: "Afventer",
+        date: new Date().toLocaleDateString("da-DK"),
+        createdAt: Date.now(),
+        ideas: newOrder.ideas,
+        link: newOrder.link
+      });
+      
+      setNewOrder({ artist: "", track: "", email: "", ideas: "", link: "" });
+      setOrderSuccess(true);
+      setTimeout(() => setOrderSuccess(false), 5000);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `customers/${code}/orders`);
+    }
   };
 
   const getStatusIcon = (status: Status) => {
@@ -96,13 +149,13 @@ export default function Dashboard() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 blur-[80px] rounded-full pointer-events-none" />
         
         <img
-          src="https://i.pravatar.cc/150?img=11"
+          src={customerInfo?.imageUrl || "https://i.pravatar.cc/150?img=11"}
           alt="Profile"
           className="w-24 h-24 rounded-full border-4 border-zinc-800 object-cover relative z-10"
         />
         <div className="relative z-10">
-          <h1 className="text-3xl font-bold text-white mb-2">Velkommen tilbage, Lars!</h1>
-          <p className="text-zinc-400">Ordrenummer: <span className="text-white font-mono bg-zinc-800 px-2 py-1 rounded ml-1">#CBW-10482</span></p>
+          <h1 className="text-3xl font-bold text-white mb-2">Velkommen tilbage, {customerInfo?.name || "Kunde"}!</h1>
+          <p className="text-zinc-400">Ordrenummer: <span className="text-white font-mono bg-zinc-800 px-2 py-1 rounded ml-1">#{customerInfo?.orderNumber || "..."}</span></p>
         </div>
       </div>
 
@@ -261,6 +314,10 @@ export default function Dashboard() {
                 <Send className="w-5 h-5" />
               </button>
             </form>
+          </div>
+          
+          <div className="mt-8">
+            <ChatWidget />
           </div>
         </div>
 
