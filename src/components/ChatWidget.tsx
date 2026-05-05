@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { MessageSquare, X, Send, Circle, Users } from "lucide-react";
-import { db, handleFirestoreError } from "../firebase";
+import { db, auth, handleFirestoreError } from "../firebase";
 import { 
   collection, 
   query, 
@@ -81,68 +81,86 @@ export default function ChatWidget() {
   useEffect(() => {
     if (!userId) return;
 
-    // Presence system
+    let interval: NodeJS.Timeout;
     const userRef = doc(db, "online_users", userId);
     
-    const updatePresence = async () => {
-      try {
-        await setDoc(userRef, {
-          name: actualName,
-          isAdmin: isUserAdmin,
-          lastActive: Date.now()
-        });
-      } catch (err) {
-        console.error("Presence update error:", err);
-      }
-    };
-
-    updatePresence();
-    const interval = setInterval(updatePresence, 30000); // Heartbeat every 30s
-
-    // Cleanup on unmount or tab close
     const handleBeforeUnload = () => {
       deleteDoc(userRef).catch(() => {});
     };
-    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      if (!user) return; // Wait for auth
+
+      const updatePresence = async () => {
+        try {
+          await setDoc(userRef, {
+            name: actualName,
+            isAdmin: isUserAdmin,
+            lastActive: Date.now()
+          });
+        } catch (err) {
+          console.error("Presence update error:", err);
+        }
+      };
+
+      updatePresence();
+      if (!interval) {
+        interval = setInterval(updatePresence, 30000); // Heartbeat every 30s
+        window.addEventListener("beforeunload", handleBeforeUnload);
+      }
+    });
 
     return () => {
-      clearInterval(interval);
+      unsubscribeAuth();
+      if (interval) clearInterval(interval);
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      deleteDoc(userRef).catch((err) => console.error("Presence delete error:", err));
+      deleteDoc(userRef).catch(() => {});
     };
   }, [userId, actualName, isUserAdmin]);
 
   useEffect(() => {
-    // Listen to online users
-    const qUsers = query(collection(db, "online_users"));
-    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
-      const now = Date.now();
-      const users = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() } as OnlineUser))
-        .filter((u) => now - u.lastActive < 60000); // Consider online if active in last 60s
-      setOnlineUsers(users);
-    }, (error) => {
-      console.error("Online users snapshot error: ", error);
+    if (!userId) return;
+
+    let unsubUsers: (() => void) | undefined;
+    let unsubMsgs: (() => void) | undefined;
+
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      if (!user) return; // Wait for Firebase Auth to initialize!
+
+      // Only subscribe if not already subscribed
+      if (!unsubUsers) {
+        const qUsers = query(collection(db, "online_users"));
+        unsubUsers = onSnapshot(qUsers, (snapshot) => {
+          const now = Date.now();
+          const users = snapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() } as OnlineUser))
+            .filter((u) => now - u.lastActive < 60000); 
+          setOnlineUsers(users);
+        }, (error) => {
+          console.error("Online users snapshot error: ", error);
+        });
+      }
+
+      if (!unsubMsgs) {
+        const qMsgs = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(50));
+        unsubMsgs = onSnapshot(qMsgs, (snapshot) => {
+          const msgsData = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data()
+          } as ChatMessage)).reverse();
+          setMessages(msgsData);
+        }, (error) => {
+          console.error("Messages snapshot error: ", error);
+        });
+      }
     });
 
-    return () => unsubUsers();
-  }, []);
-
-  useEffect(() => {
-    // Listen to messages
-    const qMsgs = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(50));
-    const unsubMsgs = onSnapshot(qMsgs, (snapshot) => {
-      const msgsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data()
-      } as ChatMessage)).reverse();
-      setMessages(msgsData);
-    }, (error) => {
-      console.error("Messages snapshot error: ", error);
-    });
-
-    return () => unsubMsgs();
-  }, []);
+    return () => {
+      unsubscribeAuth();
+      if (unsubUsers) unsubUsers();
+      if (unsubMsgs) unsubMsgs();
+    };
+  }, [userId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -151,19 +169,26 @@ export default function ChatWidget() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !userId) return;
+    
+    if (!auth.currentUser) {
+      alert("Systemet er ved at forbinde. Prøv lige om et øjeblik.");
+      return;
+    }
 
     const msgText = newMessage.trim();
     setNewMessage("");
 
     try {
-      await addDoc(collection(db, "messages"), {
+      const payload = {
         text: msgText,
         senderId: userId,
         senderName: actualName || fallbackName,
         senderImage: actualImage || "",
         isAdmin: isUserAdmin,
         createdAt: Date.now()
-      });
+      };
+      console.log("Sending payload:", payload);
+      await addDoc(collection(db, "messages"), payload);
     } catch (err: any) {
       alert("Fejl ved afsendelse: " + (err.message || String(err)));
       console.error(err);

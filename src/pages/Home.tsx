@@ -1,3 +1,4 @@
+import React from "react";
 import { motion } from "motion/react";
 import { ArrowRight, Shield, Zap, RefreshCw, Star } from "lucide-react";
 import { Link } from "react-router-dom";

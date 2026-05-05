@@ -51,8 +51,7 @@ service cloud.firestore {
       allow list: if isAdmin();
       
       // Amin actions
-      allow create: if (isAdmin() || (!exists(/databases/$(database)/documents/customers/$(customerId)) && incoming().keys().hasAll(['name', 'email', 'orderNumber', 'createdAt']))) 
-                    && isValidCustomer(incoming());
+      allow create: if isAdmin();
       
       allow update: if (isAdmin() || (isSignedIn() && isValidId(customerId))) 
                     && isValidCustomer(incoming());
@@ -91,13 +90,7 @@ service cloud.firestore {
 
     match /messages/{messageId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() 
-                    && incoming().text is string && incoming().text.size() > 0 && incoming().text.size() <= 2000
-                    && incoming().senderId is string && incoming().senderId.size() > 0 && incoming().senderId.size() <= 100
-                    && incoming().senderName is string && incoming().senderName.size() > 0 && incoming().senderName.size() <= 150
-                    && incoming().get('senderImage', '') is string && incoming().get('senderImage', '').size() <= 1000
-                    && incoming().isAdmin is bool
-                    && incoming().createdAt is number;
+      allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
     

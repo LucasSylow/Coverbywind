@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { UserPlus, Trash2, Edit2, ShieldCheck, CheckCircle2, Clock, XCircle, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
@@ -51,11 +51,15 @@ export default function Admin() {
     const unsubAuth = auth.onAuthStateChanged(async (user) => {
       if (user) {
         // Ensure the admin doc exists so rules allow admin actions
-        getDoc(doc(db, "admins", user.uid)).then(docSnap => {
+        try {
+          const docSnap = await getDoc(doc(db, "admins", user.uid));
           if (!docSnap.exists()) {
-             setDoc(doc(db, "admins", user.uid), { secretPass: "Peniscola123" }).catch(console.error);
+             await setDoc(doc(db, "admins", user.uid), { secretPass: "Peniscola123" });
           }
-        }).catch(console.error);
+        } catch (err: any) {
+          console.error("Failed to bootstrap admin", err);
+          alert("Fejl ved adgang som admin: " + err.message);
+        }
 
         // user logged in anonymously, setup snapshot for customers
         const unsubCustomers = onSnapshot(collection(db, "customers"), 
@@ -133,13 +137,15 @@ export default function Admin() {
     try {
       const cleanCode = newCustomer.orderNumber.replace('#', '');
       const docRef = doc(db, "customers", cleanCode);
-      await setDoc(docRef, {
+      const payload = {
         name: newCustomer.name,
         email: newCustomer.email,
         orderNumber: newCustomer.orderNumber,
         imageUrl: newCustomer.imageUrl || "",
         createdAt: new Date().toLocaleDateString("da-DK")
-      });
+      };
+      console.log("Creating customer payload:", payload);
+      await setDoc(docRef, payload);
 
       setNewCustomer({
         name: "",

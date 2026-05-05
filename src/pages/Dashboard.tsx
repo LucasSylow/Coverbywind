@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
 import { collection, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
