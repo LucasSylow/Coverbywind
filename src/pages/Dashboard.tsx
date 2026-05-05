@@ -157,7 +157,7 @@ export default function Dashboard() {
       case "Annulleret":
         return <XCircle className="w-5 h-5 text-red-500" />;
       case "I gang":
-        return <Clock className="w-5 h-5 text-blue-500 animate-spin-slow" />;
+        return <Clock className="w-5 h-5 text-orange-500 animate-spin-slow" />;
     }
   };
 
@@ -170,7 +170,7 @@ export default function Dashboard() {
       case "Annulleret":
         return "bg-red-500/10 text-red-500 border-red-500/20";
       case "I gang":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse";
+        return "bg-orange-500/10 text-orange-500 border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.4)] animate-pulse";
     }
   };
 
@@ -293,11 +293,11 @@ export default function Dashboard() {
             {waitingCovers.length > 0 ? (
               <div className="flex flex-col gap-4">
                 {waitingCovers.map((cover) => (
-                  <div key={cover.id} className={`bg-zinc-900/50 border ${cover.status === 'I gang' ? 'border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.15)] relative overflow-hidden' : 'border-zinc-800'} rounded-2xl p-5 flex flex-col gap-4`}>
+                  <div key={cover.id} className={`bg-zinc-900/50 border ${cover.status === 'I gang' ? 'border-orange-500/50 shadow-[0_0_25px_rgba(249,115,22,0.2)] relative overflow-hidden' : 'border-zinc-800'} rounded-2xl p-5 flex flex-col gap-4`}>
                     {cover.status === 'I gang' && (
-                      <div className="absolute top-0 left-0 h-1 bg-blue-500/20 w-full">
+                      <div className="absolute top-0 left-0 h-1 bg-orange-500/20 w-full">
                         <div 
-                          className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)] transition-all duration-1000 ease-out"
+                          className="h-full bg-gradient-to-r from-orange-500 to-amber-400 shadow-[0_0_15px_rgba(249,115,22,0.8)] transition-all duration-1000 ease-out"
                           style={{ width: `${getProgressPercentage(cover.inProgressAt)}%` }}
                         />
                       </div>
@@ -312,6 +312,12 @@ export default function Dashboard() {
                         {cover.status}
                       </div>
                     </div>
+                    {cover.status === 'I gang' && (
+                      <div className="mt-2 text-orange-400/90 text-sm bg-orange-500/10 border border-orange-500/20 p-3 rounded-xl flex items-start gap-2">
+                        <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-orange-500" />
+                        <p>Dit coverbillede er blevet godkendt og er under behandling, hold øje det er snart klar, downloadlinket er kun gyldigt i 3 dage når det er færdigt</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

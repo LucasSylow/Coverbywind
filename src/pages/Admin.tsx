@@ -311,7 +311,7 @@ export default function Admin() {
       case "Annulleret":
         return "bg-red-500/10 text-red-500 border-red-500/20";
       case "I gang":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse";
+        return "bg-orange-500/10 text-orange-500 border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.4)] animate-pulse";
     }
   };
 
@@ -406,7 +406,7 @@ export default function Admin() {
                   className={`w-full px-3 py-2 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                 >
                   <option value="Afventer" className="bg-zinc-900 text-yellow-500">Afventer</option>
-                  <option value="I gang" className="bg-zinc-900 text-blue-500">I gang</option>
+                  <option value="I gang" className="bg-zinc-900 text-orange-500">I gang</option>
                   <option value="Gennemført" className="bg-zinc-900 text-green-500">Gennemført</option>
                   <option value="Annulleret" className="bg-zinc-900 text-red-500">Annulleret</option>
                 </select>
@@ -656,7 +656,7 @@ export default function Admin() {
                                    className={`px-3 py-1.5 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                                  >
                                    <option value="Afventer" className="bg-zinc-900 text-yellow-500">Afventer</option>
-                                   <option value="I gang" className="bg-zinc-900 text-blue-500">I gang</option>
+                                   <option value="I gang" className="bg-zinc-900 text-orange-500">I gang</option>
                                    <option value="Gennemført" className="bg-zinc-900 text-green-500">Gennemført</option>
                                    <option value="Annulleret" className="bg-zinc-900 text-red-500">Annulleret</option>
                                  </select>
