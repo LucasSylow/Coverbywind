@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, Trash2, Edit2, ShieldCheck, CheckCircle2, Clock, XCircle, ChevronDown, ChevronUp, Image as ImageIcon, Ban } from "lucide-react";
+import { UserPlus, Trash2, Edit2, ShieldCheck, CheckCircle2, Clock, XCircle, ChevronDown, ChevronUp, Image as ImageIcon, Ban, Search } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
 import { collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, getDocs, getDoc, query, limit, orderBy } from "firebase/firestore";
 import ChatWidget from "../components/ChatWidget";
@@ -151,6 +151,8 @@ export default function Admin() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers.map(c => c.id).join(',')]);
+
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [newCustomer, setNewCustomer] = useState({
     name: "",
@@ -311,6 +313,12 @@ export default function Admin() {
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="pt-8 pb-24 max-w-6xl mx-auto w-full px-4">
@@ -477,12 +485,22 @@ export default function Admin() {
 
         {/* Customer List */}
         <div className="lg:col-span-2 flex flex-col gap-6">
-          {customers.length === 0 ? (
+          <div className="bg-[#111111] border border-zinc-800/80 rounded-[1.5rem] p-4 flex items-center shadow-lg gap-3">
+            <Search className="w-5 h-5 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Søg efter navn, e-mail eller kode..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-transparent text-white placeholder-zinc-500 focus:outline-none"
+            />
+          </div>
+          {filteredCustomers.length === 0 ? (
              <div className="text-center py-12 text-zinc-500 bg-[#111111] rounded-[2rem] border border-zinc-800 border-dashed">
-                Ingen kunder oprettet endnu.
+                {customers.length === 0 ? "Ingen kunder oprettet endnu." : "Ingen kunder matchede din søgning."}
              </div>
           ) : (
-             customers.map(customer => (
+             filteredCustomers.map(customer => (
                <div key={customer.id} className="bg-[#111111] border border-zinc-800/80 rounded-[2rem] p-6 shadow-lg overflow-hidden">
                  
                  <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
