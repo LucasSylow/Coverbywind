@@ -36,12 +36,14 @@ service cloud.firestore {
     // Customers Collection
     match /customers/{customerId} {
       function isValidCustomer(data) {
-        return data.size() >= 4 && data.size() <= 6
+        return data.size() >= 4 && data.size() <= 10
           && data.name is string && data.name.size() > 0 && data.name.size() <= 100
           && data.email is string && data.email.size() <= 150
           && data.orderNumber is string && data.orderNumber.size() > 0 && data.orderNumber.size() <= 50
           && data.createdAt is string
           && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 1000)
+          && (data.get('expirationDate', '') is string && data.get('expirationDate', '').size() <= 50)
+          && (data.get('hasAcceptedTerms', false) is bool)
           && (data.get('__test', false) is bool); // allow test field
       }
 

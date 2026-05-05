@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, ShieldAlert } from 'lucide-react';
-import { db } from '../firebase';
+import { db, handleFirestoreError } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
 
 interface TermsPopupProps {
   isOpen: boolean;
@@ -24,6 +33,7 @@ export default function TermsPopup({ isOpen, onClose, customerCode }: TermsPopup
       onClose();
     } catch (e) {
       console.error(e);
+      handleFirestoreError(e, OperationType.UPDATE, `customers/${customerCode}`);
       // Fallback
       onClose();
     } finally {
