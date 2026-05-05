@@ -24,9 +24,10 @@
         "artist": { "type": "string", "description": "Artist name." },
         "track": { "type": "string", "description": "Track title." },
         "email": { "type": "string", "description": "Contact email for the order." },
-        "status": { "type": "string", "enum": ["Afventer", "Gennemført", "Annulleret"], "description": "Status of the order." },
+        "status": { "type": "string", "enum": ["Afventer", "I gang", "Gennemført", "Annulleret"], "description": "Status of the order." },
         "date": { "type": "string", "description": "Formatted date string." },
         "createdAt": { "type": "number", "description": "Server timestamp of creation." },
+        "inProgressAt": { "type": "number", "description": "Unix timestamp when the order was started." },
         "ideas": { "type": "string", "description": "Ideas for the cover." },
         "link": { "type": "string", "description": "Inspiration link." },
         "imageUrl": { "type": "string", "description": "URL to the finished cover art." }

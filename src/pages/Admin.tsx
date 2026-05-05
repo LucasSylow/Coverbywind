@@ -15,7 +15,7 @@ enum OperationType {
   WRITE = 'write',
 }
 
-type Status = "Afventer" | "Gennemført" | "Annulleret";
+type Status = "Afventer" | "Gennemført" | "Annulleret" | "I gang";
 
 interface Order {
   id: string;
@@ -253,7 +253,11 @@ export default function Admin() {
   const handleUpdateOrderStatus = async (customerId: string, orderId: string, newStatus: Status) => {
     try {
       const orderRef = doc(db, `customers/${customerId}/orders`, orderId);
-      await updateDoc(orderRef, { status: newStatus });
+      const updateData: any = { status: newStatus };
+      if (newStatus === "I gang") {
+        updateData.inProgressAt = Date.now();
+      }
+      await updateDoc(orderRef, updateData);
       
       // Update local state temporarily for snappy UI (snapshot might take a second since orders aren't hooked via real-time here)
       setCustomers(customers.map(c => {
@@ -306,10 +310,19 @@ export default function Admin() {
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       case "Annulleret":
         return "bg-red-500/10 text-red-500 border-red-500/20";
+      case "I gang":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse";
     }
   };
 
-  const pendingOrders = customers.flatMap(c => c.orders.map(o => ({ ...o, customerName: c.name, customerEmail: c.email, customerId: c.id }))).filter(o => o.status === "Afventer");
+  const pendingOrders = customers
+    .flatMap(c => c.orders.map(o => ({ ...o, customerName: c.name, customerEmail: c.email, customerId: c.id })))
+    .filter(o => o.status === "Afventer" || o.status === "I gang")
+    .sort((a, b) => {
+      if (a.status === "I gang" && b.status !== "I gang") return -1;
+      if (a.status !== "I gang" && b.status === "I gang") return 1;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -353,7 +366,7 @@ export default function Admin() {
       <div className="mb-8">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Clock className="w-5 h-5 text-yellow-500" />
-          Nye ordrer (Afventer) 
+          Nye ordrer (Afventer / I gang) 
           <span className="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full text-sm ml-2">{pendingOrders.length}</span>
         </h2>
         {pendingOrders.length === 0 ? (
@@ -393,6 +406,7 @@ export default function Admin() {
                   className={`w-full px-3 py-2 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                 >
                   <option value="Afventer" className="bg-zinc-900 text-yellow-500">Afventer</option>
+                  <option value="I gang" className="bg-zinc-900 text-blue-500">I gang</option>
                   <option value="Gennemført" className="bg-zinc-900 text-green-500">Gennemført</option>
                   <option value="Annulleret" className="bg-zinc-900 text-red-500">Annulleret</option>
                 </select>
@@ -642,6 +656,7 @@ export default function Admin() {
                                    className={`px-3 py-1.5 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                                  >
                                    <option value="Afventer" className="bg-zinc-900 text-yellow-500">Afventer</option>
+                                   <option value="I gang" className="bg-zinc-900 text-blue-500">I gang</option>
                                    <option value="Gennemført" className="bg-zinc-900 text-green-500">Gennemført</option>
                                    <option value="Annulleret" className="bg-zinc-900 text-red-500">Annulleret</option>
                                  </select>

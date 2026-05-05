@@ -64,13 +64,14 @@ service cloud.firestore {
       // Orders Subcollection
       match /orders/{orderId} {
         function isValidOrder(data) {
-          return data.size() >= 6 && data.size() <= 10
+          return data.size() >= 6 && data.size() <= 11
             && data.artist is string && data.artist.size() > 0 && data.artist.size() <= 100
             && data.track is string && data.track.size() > 0 && data.track.size() <= 100
             && data.email is string && data.email.size() > 0 && data.email.size() <= 150
-            && data.status is string && data.status in ['Afventer', 'Gennemført', 'Annulleret']
+            && data.status is string && data.status in ['Afventer', 'I gang', 'Gennemført', 'Annulleret']
             && data.date is string && data.date.size() > 0 && data.date.size() <= 50
             && data.createdAt is number
+            && (data.get('inProgressAt', 0) is number)
             && (data.get('ideas', '') is string && data.get('ideas', '').size() <= 2000)
             && (data.get('link', '') is string && data.get('link', '').size() <= 500)
             && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 1000)

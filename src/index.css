@@ -3,6 +3,7 @@
 @theme {
   --animate-marquee: marquee 30s linear infinite;
   --animate-shimmer: shimmer 1.5s infinite;
+  --animate-spin-slow: spin 3s linear infinite;
 
   @keyframes marquee {
     0% { transform: translateX(0); }

@@ -17,7 +17,7 @@ enum OperationType {
   WRITE = 'write',
 }
 
-type Status = "Afventer" | "Gennemført" | "Annulleret";
+type Status = "Afventer" | "Gennemført" | "Annulleret" | "I gang";
 
 interface Cover {
   id: string;
@@ -27,6 +27,7 @@ interface Cover {
   date: string;
   imageUrl?: string;
   downloadUrl?: string;
+  inProgressAt?: number;
 }
 
 export default function Dashboard() {
@@ -83,7 +84,8 @@ export default function Dashboard() {
                  status: data.status || "Afventer",
                  date: data.date || "",
                  imageUrl: data.imageUrl || "",
-                 downloadUrl: data.downloadUrl || ""
+                 downloadUrl: data.downloadUrl || "",
+                 inProgressAt: data.inProgressAt
                });
             });
             // basic sort: newest first assume created format allows sort
@@ -154,6 +156,8 @@ export default function Dashboard() {
         return <Clock className="w-5 h-5 text-yellow-500" />;
       case "Annulleret":
         return <XCircle className="w-5 h-5 text-red-500" />;
+      case "I gang":
+        return <Clock className="w-5 h-5 text-blue-500 animate-spin-slow" />;
     }
   };
 
@@ -165,6 +169,8 @@ export default function Dashboard() {
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       case "Annulleret":
         return "bg-red-500/10 text-red-500 border-red-500/20";
+      case "I gang":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)] animate-pulse";
     }
   };
 
@@ -175,7 +181,16 @@ export default function Dashboard() {
   };
 
   const allPreviousCovers = covers;
-  const waitingCovers = covers.filter((c) => c.status === "Afventer");
+  const waitingCovers = covers.filter((c) => c.status === "Afventer" || c.status === "I gang");
+
+  const getProgressPercentage = (inProgressAt?: number) => {
+    if (!inProgressAt) return 5; // Default some progress
+    const now = Date.now();
+    const elapsed = now - inProgressAt;
+    const totalDuration = 5 * 24 * 60 * 60 * 1000; // 5 days in ms
+    const percentage = Math.min(100, Math.max(5, (elapsed / totalDuration) * 100));
+    return percentage;
+  };
 
   const customerCode = localStorage.getItem("cbw_customer_code") || "";
 
@@ -278,14 +293,24 @@ export default function Dashboard() {
             {waitingCovers.length > 0 ? (
               <div className="flex flex-col gap-4">
                 {waitingCovers.map((cover) => (
-                  <div key={cover.id} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                    <div>
-                      <h4 className="text-lg font-bold text-white leading-tight">{cover.track}</h4>
-                      <p className="text-zinc-400 text-sm mt-1">{cover.artist} • Bestilt: {cover.date}</p>
-                    </div>
-                    <div className={`px-4 py-2 rounded-full border text-sm font-bold flex items-center gap-2 shrink-0 ${getStatusClass(cover.status)}`}>
-                      {getStatusIcon(cover.status)}
-                      {cover.status}
+                  <div key={cover.id} className={`bg-zinc-900/50 border ${cover.status === 'I gang' ? 'border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.15)] relative overflow-hidden' : 'border-zinc-800'} rounded-2xl p-5 flex flex-col gap-4`}>
+                    {cover.status === 'I gang' && (
+                      <div className="absolute top-0 left-0 h-1 bg-blue-500/20 w-full">
+                        <div 
+                          className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)] transition-all duration-1000 ease-out"
+                          style={{ width: `${getProgressPercentage(cover.inProgressAt)}%` }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                      <div>
+                        <h4 className="text-lg font-bold text-white leading-tight">{cover.track}</h4>
+                        <p className="text-zinc-400 text-sm mt-1">{cover.artist} • Bestilt: {cover.date}</p>
+                      </div>
+                      <div className={`px-4 py-2 rounded-full border text-sm font-bold flex items-center gap-2 shrink-0 ${getStatusClass(cover.status)}`}>
+                        {getStatusIcon(cover.status)}
+                        {cover.status}
+                      </div>
                     </div>
                   </div>
                 ))}
