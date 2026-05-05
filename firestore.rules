@@ -91,7 +91,8 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSignedIn();
     }
     
     match /online_users/{userId} {

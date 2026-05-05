@@ -1,12 +1,36 @@
-import { Link, useLocation } from "react-router-dom";
-import { User, ArrowUpRight, Wind, Menu } from "lucide-react";
-import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { User, ArrowUpRight, Wind, Menu, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import { db } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function NavBar({ onLoginClick }: { onLoginClick: () => void }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const [customerName, setCustomerName] = useState<string | null>(null);
+  const adminCode = localStorage.getItem("cbw_admin_code") === "Peniscola123" ? "admin" : null;
+  const customerCode = localStorage.getItem("cbw_customer_code");
+
+  useEffect(() => {
+    if (customerCode && !adminCode) {
+      getDoc(doc(db, "customers", customerCode)).then(docSnap => {
+        if (docSnap.exists()) {
+          setCustomerName(docSnap.data().name);
+        }
+      });
+    }
+  }, [customerCode, adminCode]);
+
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = () => {
+    localStorage.removeItem("cbw_customer_code");
+    localStorage.removeItem("cbw_admin_code");
+    navigate("/");
+    window.location.reload();
+  };
 
   const navLinks = [
     { name: "Forside", path: "/" },
@@ -39,13 +63,36 @@ export default function NavBar({ onLoginClick }: { onLoginClick: () => void }) {
 
         {/* Right Actions */}
         <div className="hidden md:flex items-center gap-6 pr-2">
-          <button
-            onClick={onLoginClick}
-            className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors"
-          >
-            <User className="w-[18px] h-[18px]" />
-            <span>Log ind</span>
-          </button>
+          {adminCode ? (
+            <div className="flex items-center gap-4">
+              <Link to="/admin" className="text-sm font-medium text-amber-500 hover:text-amber-400 transition-colors">
+                Adminpanel
+              </Link>
+              <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm font-medium text-zinc-400 hover:text-red-400 transition-colors">
+                <LogOut className="w-4 h-4" />
+                <span>Log ud</span>
+              </button>
+            </div>
+          ) : customerCode ? (
+            <div className="flex items-center gap-4 text-sm font-medium">
+              <span className="text-white">Hej {customerName || "Kunde"}!</span>
+              <Link to="/dashboard" className="text-purple-400 hover:text-purple-300">
+                Dashboard
+              </Link>
+              <button onClick={handleLogout} className="flex items-center gap-1.5 text-zinc-400 hover:text-red-400 transition-colors">
+                <LogOut className="w-4 h-4" />
+                <span>Log ud</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onLoginClick}
+              className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors"
+            >
+              <User className="w-[18px] h-[18px]" />
+              <span>Log ind</span>
+            </button>
+          )}
           
           <Link to="/priser" className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold flex items-center gap-2 pl-5 pr-1.5 py-1.5 rounded-full transition-colors">
             <span>Bestil nu</span>
@@ -80,16 +127,35 @@ export default function NavBar({ onLoginClick }: { onLoginClick: () => void }) {
             </Link>
           ))}
           <div className="h-px bg-zinc-800 w-full my-2"></div>
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              onLoginClick();
-            }}
-            className="flex items-center gap-2 text-lg font-medium text-zinc-300 p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-          >
-            <User className="w-5 h-5" />
-            <span>Log ind med ordrenummer</span>
-          </button>
+          {adminCode ? (
+            <>
+              <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="text-amber-500 font-medium p-2 hover:bg-zinc-800 rounded-lg">Adminpanel</Link>
+              <button onClick={handleLogout} className="flex items-center gap-2 text-lg font-medium text-red-400 p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                <LogOut className="w-5 h-5" />
+                <span>Log ud</span>
+              </button>
+            </>
+          ) : customerCode ? (
+            <>
+              <div className="text-zinc-300 font-medium p-2">Hej {customerName || "Kunde"}!</div>
+              <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="text-purple-400 font-medium p-2 hover:bg-zinc-800 rounded-lg">Dashboard</Link>
+              <button onClick={handleLogout} className="flex items-center gap-2 text-lg font-medium text-red-400 p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                <LogOut className="w-5 h-5" />
+                <span>Log ud</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onLoginClick();
+              }}
+              className="flex items-center gap-2 text-lg font-medium text-zinc-300 p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <User className="w-5 h-5" />
+              <span>Log ind med ordrenummer</span>
+            </button>
+          )}
         </div>
       )}
     </div>

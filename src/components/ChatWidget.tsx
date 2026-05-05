@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MessageSquare, X, Send, Circle, Users } from "lucide-react";
+import { MessageSquare, X, Send, Circle, Users, Trash2, Info } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
 import { 
   collection, 
@@ -39,7 +39,12 @@ enum OperationType {
   DELETE = 'delete'
 }
 
-export default function ChatWidget() {
+interface ChatWidgetProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function ChatWidget({ isOpen, onClose }: ChatWidgetProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -50,7 +55,7 @@ export default function ChatWidget() {
   const userId = adminCode || customerCode;
   
   const isUserAdmin = !!adminCode;
-  const fallbackName = isUserAdmin ? "Operator" : `Kunde ${customerCode}`;
+  const fallbackName = isUserAdmin ? "Coverbywind" : `Kunde ${customerCode}`;
   
   const [actualName, setActualName] = useState<string>(fallbackName);
   const [actualImage, setActualImage] = useState<string | null>(null);
@@ -61,7 +66,8 @@ export default function ChatWidget() {
   // Fetch actual customer name if user
   useEffect(() => {
     if (isUserAdmin) {
-      setActualName("Operator");
+      setActualName("Coverbywind");
+      setActualImage("https://cdn-icons-png.flaticon.com/512/9131/9131529.png"); // Setting a default image for admin if needed
     } else if (customerCode) {
       const unsub = onSnapshot(doc(db, "customers", customerCode), (docSnap) => {
         if (docSnap.exists()) {
@@ -195,23 +201,43 @@ export default function ChatWidget() {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!messageId) return;
+    try {
+      await deleteDoc(doc(db, "messages", messageId));
+    } catch (err: any) {
+      alert("Kunne ikke slette besked: " + err.message);
+    }
+  };
+
   return (
-    <div className="w-full h-[600px] bg-[#111111] border border-zinc-800/80 rounded-[2rem] shadow-xl flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 bg-[#1a1a1a] border-b border-zinc-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center text-purple-400">
-            <MessageSquare className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-white text-base">Fælles Chat</h3>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-              <Circle className="w-2 h-2 fill-green-500 text-green-500" />
-              <span>{onlineUsers.length} online</span>
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ y: 20, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 20, opacity: 0, scale: 0.95 }}
+            className="fixed bottom-6 right-6 w-[380px] h-[650px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-3rem)] z-50 bg-[#111111] border border-zinc-800/80 rounded-[2rem] shadow-[0_0_40px_rgba(37,99,235,0.15)] flex flex-col overflow-hidden"
+          >
+            {/* Header */}
+            <div className="px-5 py-4 bg-[#1a1a1a] border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white text-base">Fælles Chat</h3>
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                    <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                    <span>{onlineUsers.length} online</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          </div>
-        </div>
-      </div>
 
       {/* Online Users List (Small row at top) */}
       <div className="px-4 py-2 border-b border-zinc-800/50 bg-[#161616] flex gap-2 overflow-x-auto whitespace-nowrap scrollbar-thin scrollbar-thumb-zinc-700">
@@ -220,12 +246,20 @@ export default function ChatWidget() {
         </div>
         {onlineUsers.map(user => (
           <div key={user.id} className="flex items-center gap-1.5 bg-[#222] px-2.5 py-1 rounded-md">
-            <div className={`w-1.5 h-1.5 rounded-full ${user.isAdmin ? 'bg-amber-500' : 'bg-green-500'}`} />
-            <span className={`text-xs ${user.isAdmin ? 'text-amber-400 font-semibold' : 'text-zinc-300'}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${user.isAdmin ? 'bg-blue-500' : 'bg-green-500'}`} />
+            <span className={`text-xs ${user.isAdmin ? 'text-blue-400 font-semibold' : 'text-zinc-300'}`}>
               {user.name}
             </span>
           </div>
         ))}
+      </div>
+
+      {/* Support Notice */}
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-start gap-2">
+        <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+        <p className="text-xs text-amber-400/90 leading-relaxed">
+          Denne chat er ikke lavet til support. Hvis du ønsker support eller at kontakte Coverbywind direkte, kan du lave en ticket på din kundeside.
+        </p>
       </div>
 
       {/* Messages Area */}
@@ -249,22 +283,22 @@ export default function ChatWidget() {
                       src={msg.senderImage} 
                       alt="Profil" 
                       className={`flex-shrink-0 w-8 h-8 rounded-full object-cover shadow-md ${
-                        msg.isAdmin ? 'ring-2 ring-amber-500' : 'ring-2 ring-purple-600'
+                        msg.isAdmin ? 'ring-2 ring-blue-500' : 'ring-2 ring-zinc-600'
                       }`}
                     />
                   ) : (
                     <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-md ${
-                      msg.isAdmin ? 'bg-amber-500' : 'bg-purple-600'
+                      msg.isAdmin ? 'bg-blue-600' : 'bg-zinc-700'
                     }`}>
                       {initials}
                     </div>
                   )}
                   
-                  {/* Message Bubble + Name */}
-                  <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1`}>
+                  {/* Message Bubble + Name + Time */}
+                  <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1 min-w-[120px]`}>
                     <div className={`flex items-center gap-2 px-1`}>
                       {!isMe && (
-                        <span className={`text-[10px] uppercase tracking-wider font-bold ${msg.isAdmin ? 'text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-sm' : 'text-zinc-500'}`}>
+                        <span className={`text-[10px] uppercase tracking-wider font-bold ${msg.isAdmin ? 'text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-sm' : 'text-zinc-500'}`}>
                           {msg.senderName}
                         </span>
                       )}
@@ -273,11 +307,23 @@ export default function ChatWidget() {
                           Mig
                         </span>
                       )}
+                      <span className="text-[10px] text-zinc-600">
+                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {(isMe || isUserAdmin) && (
+                        <button 
+                          onClick={() => handleDeleteMessage(msg.id)} 
+                          className="ml-1 text-zinc-600 hover:text-red-500 transition-colors"
+                          title="Slet besked"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                     <div 
-                      className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                      className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm w-fit ${
                         isMe 
-                          ? 'bg-purple-600 text-white rounded-br-sm' 
+                          ? 'bg-blue-600 text-white rounded-br-sm' 
                           : 'bg-[#222] border border-zinc-800/80 text-zinc-200 rounded-bl-sm'
                       }`}
                     >
@@ -299,17 +345,20 @@ export default function ChatWidget() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Skriv en besked..."
-          className="flex-1 bg-[#0a0a0a] border border-zinc-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors"
+          className="flex-1 bg-[#0a0a0a] border border-zinc-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
         />
         <button
           type="submit"
           disabled={!newMessage.trim()}
-          className="w-12 h-12 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:hover:bg-purple-600 rounded-xl flex items-center justify-center text-white transition-colors shadow-lg"
+          className="w-12 h-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 rounded-xl flex items-center justify-center text-white transition-colors shadow-lg"
           title="Send besked"
         >
           <Send className="w-5 h-5" />
         </button>
       </form>
-    </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

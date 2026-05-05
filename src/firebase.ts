@@ -46,4 +46,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 // Automatically sign in anonymously on load
-signInAnonymously(auth).catch(console.error);
+signInAnonymously(auth).then(() => {
+  console.log("Successfully signed in anonymously");
+}).catch((error) => {
+  console.error("Anonymous auth failed", error);
+  alert("Kunne ikke forbinde til systemet (Auth Fejl). Mangler domænet at blive godkendt i Firebase? Fejl: " + error.message);
+});

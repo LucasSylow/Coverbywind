@@ -4,6 +4,7 @@ import { db, auth, handleFirestoreError } from "../firebase";
 import { collection, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import ChatWidget from "../components/ChatWidget";
+import TermsPopup from "../components/TermsPopup";
 
 enum OperationType {
   CREATE = 'create',
@@ -23,12 +24,13 @@ interface Cover {
   status: Status;
   date: string;
   imageUrl?: string;
+  downloadUrl?: string;
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [covers, setCovers] = useState<Cover[]>([]);
-  const [customerInfo, setCustomerInfo] = useState<{name: string, orderNumber: string, imageUrl: string} | null>(null);
+  const [customerInfo, setCustomerInfo] = useState<{name: string, orderNumber: string, imageUrl: string, expirationDate?: string, hasAcceptedTerms?: boolean} | null>(null);
 
   useEffect(() => {
     const code = localStorage.getItem("cbw_customer_code");
@@ -47,7 +49,9 @@ export default function Dashboard() {
              setCustomerInfo({
                name: data.name || "Kunde",
                orderNumber: data.orderNumber || code,
-               imageUrl: data.imageUrl || "https://i.pravatar.cc/150?img=11"
+               imageUrl: data.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png",
+               expirationDate: data.expirationDate || "",
+               hasAcceptedTerms: data.hasAcceptedTerms || false
              });
           } else {
              localStorage.removeItem("cbw_customer_code");
@@ -65,7 +69,8 @@ export default function Dashboard() {
                  track: data.track || "",
                  status: data.status || "Afventer",
                  date: data.date || "",
-                 imageUrl: data.imageUrl || ""
+                 imageUrl: data.imageUrl || "",
+                 downloadUrl: data.downloadUrl || ""
                });
             });
             // basic sort: newest first assume created format allows sort
@@ -90,11 +95,21 @@ export default function Dashboard() {
     link: "",
   });
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [orderError, setOrderError] = useState("");
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOrderError("");
+    setOrderSuccess(false);
     const code = localStorage.getItem("cbw_customer_code");
     if (!code) return;
+
+    const hasPendingOrder = covers.some(cover => cover.status === "Afventer");
+    if (hasPendingOrder) {
+      setOrderError("Du har allerede et cover der er i gang med at blive lavet, vent venligst med at oprette en ny bestilling til det igangværende cover er blevet færdigjort");
+      return;
+    }
 
     try {
       const orderId = `CBW-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -142,21 +157,51 @@ export default function Dashboard() {
   const allPreviousCovers = covers;
   const waitingCovers = covers.filter((c) => c.status === "Afventer");
 
+  const customerCode = localStorage.getItem("cbw_customer_code") || "";
+
   return (
     <div className="pt-8 pb-24 max-w-6xl mx-auto w-full">
+      <TermsPopup 
+        isOpen={customerInfo !== null && !customerInfo.hasAcceptedTerms} 
+        onClose={() => setCustomerInfo(prev => prev ? {...prev, hasAcceptedTerms: true} : prev)}
+        customerCode={customerCode}
+      />
       {/* Profile Header */}
-      <div className="bg-[#111111] border border-zinc-800/80 rounded-3xl p-8 mb-8 flex items-center gap-6 shadow-xl relative overflow-hidden">
+      <div className="bg-[#111111] border border-zinc-800/80 rounded-3xl p-8 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 blur-[80px] rounded-full pointer-events-none" />
         
-        <img
-          src={customerInfo?.imageUrl || "https://i.pravatar.cc/150?img=11"}
-          alt="Profile"
-          className="w-24 h-24 rounded-full border-4 border-zinc-800 object-cover relative z-10"
-        />
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold text-white mb-2">Velkommen tilbage, {customerInfo?.name || "Kunde"}!</h1>
-          <p className="text-zinc-400">Ordrenummer: <span className="text-white font-mono bg-zinc-800 px-2 py-1 rounded ml-1">#{customerInfo?.orderNumber || "..."}</span></p>
+        <div className="flex items-center gap-6 relative z-10 w-full md:w-auto">
+          <img
+            src={customerInfo?.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
+            alt="Profile"
+            className="w-24 h-24 rounded-full border-4 border-zinc-800 object-cover"
+          />
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Hej, {customerInfo?.name || "Kunde"}</h1>
+            <div className="flex flex-col gap-2 items-start">
+              <p className="text-zinc-400">Ordrenummer: <span className="text-white font-mono bg-zinc-800 px-2 py-1 rounded ml-1">#{customerInfo?.orderNumber || "..."}</span></p>
+              {customerInfo?.expirationDate && (() => {
+                 const diffTime = new Date(customerInfo.expirationDate).getTime() - new Date().getTime();
+                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                 return (
+                   <p className="text-sm font-medium bg-amber-500/10 text-amber-500 inline-block px-3 py-1 rounded-full border border-amber-500/20">
+                     Dit abonnement udløber om {diffDays > 0 ? diffDays : 0} {diffDays === 1 ? 'dag' : 'dage'} ({new Date(customerInfo.expirationDate).toLocaleDateString("da-DK")})
+                   </p>
+                 );
+              })()}
+            </div>
+          </div>
         </div>
+
+        <button 
+          onClick={() => setIsChatOpen(true)}
+          className="relative z-10 w-full md:w-auto overflow-hidden rounded-xl bg-blue-600 px-6 py-3 font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all hover:scale-[1.02] active:scale-95 group"
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
+          <div className="flex items-center justify-center gap-2">
+            <span className="relative z-10">Åben fælleschat</span>
+          </div>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -213,6 +258,11 @@ export default function Dashboard() {
                     <div>
                       <h4 className="text-lg font-bold text-white leading-tight">{cover.track}</h4>
                       <p className="text-zinc-400 text-sm mt-1">{cover.artist} • Dato: {cover.date}</p>
+                      {cover.downloadUrl && (
+                        <a href={cover.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg transition-colors">
+                          Download Filer
+                        </a>
+                      )}
                     </div>
                   </div>
                   <div className={`px-4 py-2 rounded-full border text-sm font-bold flex items-center gap-2 shrink-0 ${getStatusClass(cover.status)}`}>
@@ -233,6 +283,13 @@ export default function Dashboard() {
               Bestil nyt cover
             </h2>
             <p className="text-zinc-400 text-sm mb-6">Udfyld formularen for at starte processen med dit næste coverart.</p>
+
+            {orderError && (
+              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm leading-relaxed flex items-start gap-3">
+                <XCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <p>{orderError}</p>
+              </div>
+            )}
 
             {orderSuccess && (
               <div className="mb-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm leading-relaxed flex items-start gap-3">
@@ -317,7 +374,7 @@ export default function Dashboard() {
           </div>
           
           <div className="mt-8">
-            <ChatWidget />
+            <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
           </div>
         </div>
 
