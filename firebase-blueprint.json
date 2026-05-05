@@ -9,7 +9,10 @@
         "email": { "type": "string", "description": "Customer's email address." },
         "orderNumber": { "type": "string", "description": "The unique code used by the customer to log in." },
         "imageUrl": { "type": "string", "description": "URL to the customer's profile image." },
-        "createdAt": { "type": "number", "description": "Timestamp of creation." }
+        "createdAt": { "type": "number", "description": "Timestamp of creation." },
+        "expirationDate": { "type": "string", "description": "Optional expiration date" },
+        "hasAcceptedTerms": { "type": "boolean", "description": "Whether the customer has accepted terms" },
+        "isSuspended": { "type": "boolean", "description": "Whether the customer's account is suspended" }
       },
       "required": ["name", "email", "orderNumber", "createdAt"]
     },
@@ -37,6 +40,19 @@
       "properties": {
         "text": { "type": "string", "description": "The message content" },
         "senderId": { "type": "string", "description": "The order number or admin" },
+        "senderName": { "type": "string", "description": "Display name of the sender" },
+        "isAdmin": { "type": "boolean", "description": "Whether the sender is admin" },
+        "createdAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["text", "senderId", "senderName", "isAdmin", "createdAt"]
+    },
+    "CustomerChatMessage": {
+      "title": "CustomerChatMessage",
+      "description": "A private message between customer and admin",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "The message content" },
+        "senderId": { "type": "string", "description": "The sender's unique ID" },
         "senderName": { "type": "string", "description": "Display name of the sender" },
         "isAdmin": { "type": "boolean", "description": "Whether the sender is admin" },
         "createdAt": { "type": "number", "description": "Timestamp" }
@@ -71,6 +87,10 @@
     "/customers/{customerId}/orders/{orderId}": {
       "schema": { "$ref": "#/entities/Order" },
       "description": "Stores orders placed by the customer."
+    },
+    "/customers/{customerId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/CustomerChatMessage" },
+      "description": "Private chat messages between this customer and admin."
     }
   }
 }

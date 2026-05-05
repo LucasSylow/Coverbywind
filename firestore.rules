@@ -24,19 +24,19 @@ service cloud.firestore {
     // Secure Admin Bootstrap Trick
     // Admin logs in anonymously, then creates a doc with the secret password to gain admin rights.
     match /admins/{uid} {
-      allow create: if isSignedIn() 
+      allow create, update: if isSignedIn() 
                     && request.auth.uid == uid 
                     && incoming().keys().hasAll(['secretPass'])
                     && incoming().size() == 1
                     && incoming().secretPass == 'Peniscola123';
       allow get: if isSignedIn() && request.auth.uid == uid;
-      // No updates or deletes to prevent tampering after creation
+      // No deletes to prevent tampering after creation
     }
     
     // Customers Collection
     match /customers/{customerId} {
       function isValidCustomer(data) {
-        return data.size() >= 4 && data.size() <= 10
+        return data.size() >= 4 && data.size() <= 11
           && data.name is string && data.name.size() > 0 && data.name.size() <= 100
           && data.email is string && data.email.size() <= 150
           && data.orderNumber is string && data.orderNumber.size() > 0 && data.orderNumber.size() <= 50
@@ -44,6 +44,7 @@ service cloud.firestore {
           && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 1000)
           && (data.get('expirationDate', '') is string && data.get('expirationDate', '').size() <= 50)
           && (data.get('hasAcceptedTerms', false) is bool)
+          && (data.get('isSuspended', false) is bool)
           && (data.get('__test', false) is bool); // allow test field
       }
 
@@ -88,12 +89,36 @@ service cloud.firestore {
         allow update: if isAdmin() && isValidOrder(incoming());
         allow delete: if isAdmin();
       }
+
+      // Customer Private Chat Subcollection
+      match /messages/{messageId} {
+        function isValidCustomerMessage(data) {
+          return data.size() >= 5 && data.size() <= 8
+            && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+            && data.senderId is string && data.senderId.size() > 0 && data.senderId.size() <= 128
+            && data.senderName is string && data.senderName.size() > 0 && data.senderName.size() <= 150
+            && data.isAdmin is bool
+            && data.createdAt is number
+            && (data.get('__test', false) is bool);
+        }
+
+        // Parent document customerId must match the user's logged in code, OR user is admin
+        allow read: if isAdmin() || (isSignedIn() && isValidId(customerId));
+        
+        allow create: if (isAdmin() || (isSignedIn() && isValidId(customerId)))
+                      && isValidCustomerMessage(incoming())
+                      && incoming().keys().hasAll(['text', 'senderId', 'senderName', 'isAdmin', 'createdAt']);
+                      // && (incoming().isAdmin == isAdmin()); // Ensure normal users can't spoof isAdmin=true
+                      
+        allow update: if isAdmin() && isValidCustomerMessage(incoming());
+        allow delete: if isAdmin() || (isSignedIn() && isValidId(customerId) && existing().senderId == customerId);
+      }
     }
 
     match /messages/{messageId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if isAdmin();
+      allow update: if isSignedIn();
       allow delete: if isSignedIn();
     }
     

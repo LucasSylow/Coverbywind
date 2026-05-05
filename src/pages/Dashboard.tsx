@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon } from "lucide-react";
+import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon, LogOut, MessageSquare } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
 import { collection, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import ChatWidget from "../components/ChatWidget";
 import TermsPopup from "../components/TermsPopup";
+
+import PrivateChat from "../components/PrivateChat";
 
 enum OperationType {
   CREATE = 'create',
@@ -30,7 +32,7 @@ interface Cover {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [covers, setCovers] = useState<Cover[]>([]);
-  const [customerInfo, setCustomerInfo] = useState<{name: string, orderNumber: string, imageUrl: string, expirationDate?: string, hasAcceptedTerms?: boolean} | null>(null);
+  const [customerInfo, setCustomerInfo] = useState<{name: string, orderNumber: string, imageUrl: string, expirationDate?: string, hasAcceptedTerms?: boolean, isSuspended?: boolean} | null>(null);
 
   useEffect(() => {
     const code = localStorage.getItem("cbw_customer_code");
@@ -46,12 +48,23 @@ export default function Dashboard() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
              const data = docSnap.data();
+             const isExpired = data.expirationDate ? new Date(data.expirationDate).setHours(23, 59, 59, 999) < new Date().getTime() : false;
+             
+             if (isExpired && !data.isSuspended) {
+                // Auto-suspend in firestore if it's expired but not marked as suspended
+                try {
+                  await setDoc(docRef, { isSuspended: true }, { merge: true });
+                } catch(e) { console.error(e) }
+                data.isSuspended = true;
+             }
+
              setCustomerInfo({
                name: data.name || "Kunde",
                orderNumber: data.orderNumber || code,
                imageUrl: data.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png",
                expirationDate: data.expirationDate || "",
-               hasAcceptedTerms: data.hasAcceptedTerms || false
+               hasAcceptedTerms: data.hasAcceptedTerms || false,
+               isSuspended: data.isSuspended || false
              });
           } else {
              localStorage.removeItem("cbw_customer_code");
@@ -97,6 +110,7 @@ export default function Dashboard() {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +168,12 @@ export default function Dashboard() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("cbw_customer_code");
+    auth.signOut();
+    navigate("/");
+  };
+
   const allPreviousCovers = covers;
   const waitingCovers = covers.filter((c) => c.status === "Afventer");
 
@@ -194,18 +214,58 @@ export default function Dashboard() {
         </div>
 
         <button 
-          onClick={() => setIsChatOpen(true)}
-          className="relative z-10 w-full md:w-auto overflow-hidden rounded-xl bg-blue-600 px-6 py-3 font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all hover:scale-[1.02] active:scale-95 group"
+          onClick={handleLogout}
+          className="relative px-6 py-3 rounded-xl font-medium text-white overflow-hidden group transition-all w-full md:w-auto"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
-          <div className="flex items-center justify-center gap-2">
-            <span className="relative z-10">Åben fælleschat</span>
+          <div className="absolute inset-0 bg-red-600/20 group-hover:bg-red-600/30 transition-colors" />
+          <div className="absolute inset-0 border border-red-500/30 rounded-xl" />
+          <div className="flex items-center justify-center gap-2 relative z-10">
+            <LogOut className="w-4 h-4 text-red-400 group-hover:text-red-300 transition-colors" />
+            <span className="text-red-400 group-hover:text-red-300 transition-colors">Log ud</span>
           </div>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column (Orders info) */}
+      {customerInfo?.isSuspended && (
+        <div className="bg-[#111111] border border-red-500/30 rounded-[2rem] p-8 mb-8 text-center bg-red-500/5">
+          <h2 className="text-2xl font-bold text-red-500 mb-2">Abonnement udløbet</h2>
+          <p className="text-red-400 text-lg">
+            Dit abonnement er udløbet og hvis man ønsker forny det skal man kontakte os på instagram.
+          </p>
+        </div>
+      )}
+
+      {!customerInfo?.isSuspended && (
+        <>
+          <div className="bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 shadow-inner">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white mb-1">Fælleschat</h2>
+                <p className="text-sm text-zinc-400">Chat med admin og andre brugere</p>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setIsChatOpen(true)}
+              className="relative z-10 w-full sm:w-auto overflow-hidden rounded-xl bg-blue-600 px-8 py-3 font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all hover:scale-[1.02] active:scale-95 group"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
+              <div className="flex items-center justify-center gap-2 relative z-10">
+                <span>Åben fælleschat</span>
+                {unreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left Column (Orders info) */}
         <div className="lg:col-span-2 flex flex-col gap-8">
           
           {/* Waiting Covers */}
@@ -273,6 +333,17 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+
+          {/* Private Chat */}
+          {customerInfo && (
+            <div className="mt-8">
+              <PrivateChat 
+                customerId={customerCode} 
+                customerName={customerInfo.name} 
+                isAdminMode={false} 
+              />
+            </div>
+          )}
         </div>
 
         {/* Right Column (Order Form) */}
@@ -374,11 +445,13 @@ export default function Dashboard() {
           </div>
           
           <div className="mt-8">
-            <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+            <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onUnreadCountChange={setUnreadCount} />
           </div>
         </div>
 
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ export default function NavBar({ onLoginClick }: { onLoginClick: () => void }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [customerName, setCustomerName] = useState<string | null>(null);
-  const adminCode = localStorage.getItem("cbw_admin_code") === "Peniscola123" ? "admin" : null;
+  const adminCode = localStorage.getItem("cbw_admin_code") === "true" ? "admin" : null;
   const customerCode = localStorage.getItem("cbw_customer_code");
 
   useEffect(() => {

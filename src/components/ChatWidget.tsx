@@ -23,6 +23,7 @@ interface ChatMessage {
   senderImage?: string;
   isAdmin: boolean;
   createdAt: number;
+  seenBy?: { id: string; name: string; imageUrl?: string }[];
 }
 
 interface OnlineUser {
@@ -42,16 +43,17 @@ enum OperationType {
 interface ChatWidgetProps {
   isOpen: boolean;
   onClose: () => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
-export default function ChatWidget({ isOpen, onClose }: ChatWidgetProps) {
+export default function ChatWidget({ isOpen, onClose, onUnreadCountChange }: ChatWidgetProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const customerCode = localStorage.getItem("cbw_customer_code");
-  const adminCode = localStorage.getItem("cbw_admin_code") === "Peniscola123" ? "admin" : null;
+  const adminCode = localStorage.getItem("cbw_admin_code") === "true" ? "admin" : null;
   const userId = adminCode || customerCode;
   
   const isUserAdmin = !!adminCode;
@@ -167,6 +169,34 @@ export default function ChatWidget({ isOpen, onClose }: ChatWidgetProps) {
       if (unsubMsgs) unsubMsgs();
     };
   }, [userId]);
+
+  useEffect(() => {
+    if (!isOpen || !userId || !actualName) return;
+
+    // Throttle these updates slightly to avoid hammering DB
+    const timer = setTimeout(() => {
+      const unseenMessages = messages.filter(
+        (m) => m.senderId !== userId && !(m.seenBy || []).some((s) => s.id === userId)
+      );
+
+      unseenMessages.forEach((msg) => {
+        const msgRef = doc(db, "messages", msg.id);
+        const newSeenBy = [...(msg.seenBy || []), { id: userId, name: actualName, imageUrl: actualImage || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png" }];
+        setDoc(msgRef, { seenBy: newSeenBy }, { merge: true }).catch(console.error);
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [messages, isOpen, userId, actualName, actualImage]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const unseenMessages = messages.filter(
+      (m) => m.senderId !== userId && !(m.seenBy || []).some((s) => s.id === userId)
+    );
+    if (onUnreadCountChange) {
+      onUnreadCountChange(unseenMessages.length);
+    }
+  }, [messages, userId, onUnreadCountChange]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -331,6 +361,33 @@ export default function ChatWidget({ isOpen, onClose }: ChatWidgetProps) {
                     </div>
                   </div>
                 </div>
+                
+                {/* Read Receipts */}
+                {msg.seenBy && msg.seenBy.length > 0 && (
+                  <div className={`flex items-center mt-0.5 gap-0.5 ${isMe ? 'justify-end pr-[42px]' : 'justify-start pl-[42px]'}`}>
+                    {msg.seenBy.slice(0, 5).map((reader) => (
+                      <div key={reader.id} className="relative group">
+                        {reader.imageUrl ? (
+                          <img 
+                            src={reader.imageUrl} 
+                            alt={reader.name} 
+                            className="w-4 h-4 rounded-full border border-black/20 shadow-sm"
+                          />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full bg-zinc-700 flex items-center justify-center text-[8px] font-bold text-white border border-black/20 shadow-sm">
+                            {reader.name.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-zinc-800 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap z-50 pointer-events-none">
+                          Set af {reader.name}
+                        </div>
+                      </div>
+                    ))}
+                    {msg.seenBy.length > 5 && (
+                      <div className="text-[10px] text-zinc-500 ml-1">+{msg.seenBy.length - 5}</div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })

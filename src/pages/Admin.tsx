@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, Trash2, Edit2, ShieldCheck, CheckCircle2, Clock, XCircle, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
+import { UserPlus, Trash2, Edit2, ShieldCheck, CheckCircle2, Clock, XCircle, ChevronDown, ChevronUp, Image as ImageIcon, Ban } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
-import { collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, getDocs, getDoc } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, getDocs, getDoc, query, limit, orderBy } from "firebase/firestore";
 import ChatWidget from "../components/ChatWidget";
+import PrivateChat from "../components/PrivateChat";
 
 enum OperationType {
   CREATE = 'create',
@@ -37,6 +38,8 @@ interface Customer {
   imageUrl: string;
   createdAt: string;
   expirationDate?: string;
+  hasAcceptedTerms?: boolean;
+  isSuspended?: boolean;
   orders: Order[];
 }
 
@@ -46,22 +49,14 @@ export default function Admin() {
 
   useEffect(() => {
     const code = localStorage.getItem("cbw_admin_code");
-    if (code !== "Peniscola123") {
+    if (code !== "true") {
       navigate("/");
       return;
     }
     const unsubAuth = auth.onAuthStateChanged(async (user) => {
       if (user) {
-        // Ensure the admin doc exists so rules allow admin actions
-        try {
-          const docSnap = await getDoc(doc(db, "admins", user.uid));
-          if (!docSnap.exists()) {
-             await setDoc(doc(db, "admins", user.uid), { secretPass: "Peniscola123" });
-          }
-        } catch (err: any) {
-          console.error("Failed to bootstrap admin", err);
-          alert("Fejl ved adgang som admin: " + err.message);
-        }
+        // We verify admin status implicitly. If the user doesn't actually have an admin doc
+        // in Firestore, the subsequent queries will throw permission denied errors.
 
         // user logged in anonymously, setup snapshot for customers
         const unsubCustomers = onSnapshot(collection(db, "customers"), 
@@ -71,6 +66,15 @@ export default function Admin() {
             // For each customer, we fetch their orders
             for (const docSnap of snapshot.docs) {
                const data = docSnap.data();
+               const isExpired = data.expirationDate ? new Date(data.expirationDate).setHours(23, 59, 59, 999) < new Date().getTime() : false;
+               
+               if (isExpired && !data.isSuspended) {
+                 try {
+                   updateDoc(docSnap.ref, { isSuspended: true }).catch(console.error);
+                 } catch(e) {}
+                 data.isSuspended = true;
+               }
+
                const customer: Customer = {
                   id: docSnap.id,
                   name: data.name || "",
@@ -79,6 +83,7 @@ export default function Admin() {
                   imageUrl: data.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png",
                   createdAt: data.createdAt || "",
                   expirationDate: data.expirationDate || "",
+                  isSuspended: data.isSuspended || false,
                   orders: []
                };
                
@@ -118,6 +123,34 @@ export default function Admin() {
   }, []);
 
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+
+  const [customerUnreadMap, setCustomerUnreadMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const unsubs: (() => void)[] = [];
+    const customerIds = customers.map(c => c.id).join(',');
+    if (!customerIds) return;
+    
+    customers.forEach(c => {
+      const qMsgs = query(collection(db, "customers", c.id, "messages"), orderBy("createdAt", "desc"), limit(1));
+      const unsub = onSnapshot(qMsgs, (snap) => {
+        if (!snap.empty) {
+           const msg = snap.docs[0].data();
+           setCustomerUnreadMap(prev => ({...prev, [c.id]: !msg.isAdmin}));
+        } else {
+           setCustomerUnreadMap(prev => ({...prev, [c.id]: false}));
+        }
+      }, (error) => {
+         console.error("Error listening to messages", error);
+      });
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach(u => u());
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers.map(c => c.id).join(',')]);
 
   const [newCustomer, setNewCustomer] = useState({
     name: "",
@@ -205,6 +238,16 @@ export default function Admin() {
     }
   };
 
+  const handleToggleSuspend = async (id: string, currentStatus: boolean | undefined) => {
+    try {
+      await updateDoc(doc(db, "customers", id), {
+        isSuspended: !currentStatus
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `customers/${id}`);
+    }
+  };
+
   const handleUpdateOrderStatus = async (customerId: string, orderId: string, newStatus: Status) => {
     try {
       const orderRef = doc(db, `customers/${customerId}/orders`, orderId);
@@ -267,6 +310,7 @@ export default function Admin() {
   const pendingOrders = customers.flatMap(c => c.orders.map(o => ({ ...o, customerName: c.name, customerEmail: c.email, customerId: c.id }))).filter(o => o.status === "Afventer");
 
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   return (
     <div className="pt-8 pb-24 max-w-6xl mx-auto w-full px-4">
@@ -286,8 +330,13 @@ export default function Admin() {
           className="relative overflow-hidden rounded-xl bg-blue-600 px-6 py-3 font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all hover:scale-[1.02] active:scale-95 group"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
-          <div className="flex items-center justify-center gap-2">
-            <span className="relative z-10">Åben fælleschat</span>
+          <div className="flex items-center justify-center gap-2 relative z-10">
+            <span>Åben fælleschat</span>
+            {unreadCount > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg">
+                {unreadCount}
+              </span>
+            )}
           </div>
         </button>
       </div>
@@ -482,7 +531,19 @@ export default function Admin() {
                        </div>
                      ) : (
                        <div>
-                         <h3 className="text-xl font-bold text-white leading-tight">{customer.name}</h3>
+                         <h3 className="text-xl font-bold text-white leading-tight flex items-center gap-2">
+                           {customer.name}
+                           {customerUnreadMap[customer.id] && (
+                             <span className="bg-purple-600 text-white text-[10px] uppercase px-2 py-0.5 rounded-full font-bold tracking-wide shadow-[0_0_10px_rgba(168,85,247,0.4)]">
+                               Ny besked
+                             </span>
+                           )}
+                           {customer.isSuspended && (
+                             <span className="bg-red-600 text-white text-[10px] uppercase px-2 py-0.5 rounded-full font-bold tracking-wide shadow-[0_0_10px_rgba(220,38,38,0.4)]">
+                               Suspenderet
+                             </span>
+                           )}
+                         </h3>
                          <div className="flex flex-col gap-1 items-start mt-1">
                            <span className="text-zinc-300 text-sm">{customer.email}</span>
                            <span className="text-zinc-400 font-mono text-sm bg-zinc-900 px-2 py-0.5 rounded inline-block border border-zinc-800">Kode: {customer.orderNumber}</span>
@@ -511,6 +572,17 @@ export default function Admin() {
                      >
                        {customer.orders.length} ordrer
                        {expandedCustomer === customer.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                     </button>
+                     <button
+                       onClick={() => handleToggleSuspend(customer.id, customer.isSuspended)}
+                       className={`p-2 rounded-xl transition-colors ${
+                         customer.isSuspended 
+                         ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20' 
+                         : 'text-zinc-500 hover:text-red-400 hover:bg-red-400/10'
+                       }`}
+                       title={customer.isSuspended ? "Aktiver kunde" : "Suspendere kunde"}
+                     >
+                       <Ban className="w-5 h-5" />
                      </button>
                      <button
                        onClick={() => handleDeleteCustomer(customer.id)}
@@ -620,6 +692,15 @@ export default function Admin() {
                          ))}
                        </div>
                      )}
+
+                     {/* Private Chat */}
+                     <div className="mt-8 pt-6 border-t border-zinc-800/80">
+                       <PrivateChat 
+                         customerId={customer.id} 
+                         customerName={customer.name} 
+                         isAdminMode={true} 
+                       />
+                     </div>
                    </div>
                  )}
 
@@ -630,7 +711,7 @@ export default function Admin() {
 
       </div>
       
-      <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onUnreadCountChange={setUnreadCount} />
     </div>
   );
 }

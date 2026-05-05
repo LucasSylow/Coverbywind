@@ -23,29 +23,30 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (orderNumber === "Peniscola123") {
-        if (auth.currentUser) {
-          try {
-            await setDoc(doc(db, "admins", auth.currentUser.uid), { secretPass: "Peniscola123" });
-          } catch (err) {
-            // might already be admin or fail
-          }
+      if (auth.currentUser) {
+        try {
+          // Attempt to authenticate as admin securely without exposing password in frontend code
+          await setDoc(doc(db, "admins", auth.currentUser.uid), { secretPass: orderNumber });
+          localStorage.setItem("cbw_admin_code", "true");
+          navigate("/admin");
+          onClose();
+          return; // Exit early if admin authentication succeeded
+        } catch (err) {
+          // If this fails, the code is either wrong OR it's just a regular user trying to login.
+          // Meaning we swallow the error and proceed to check if it's a customer.
         }
-        localStorage.setItem("cbw_admin_code", orderNumber);
-        navigate("/admin");
+      }
+
+      const cleanCode = orderNumber.replace('#', '');
+      const docRef = doc(db, "customers", cleanCode);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        localStorage.setItem("cbw_customer_code", cleanCode);
+        navigate("/dashboard");
         onClose();
       } else {
-        const cleanCode = orderNumber.replace('#', '');
-        const docRef = doc(db, "customers", cleanCode);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          localStorage.setItem("cbw_customer_code", cleanCode);
-          navigate("/dashboard");
-          onClose();
-        } else {
-          setErrorMsg("Ordrenummer ikke fundet i vores system.");
-        }
+        setErrorMsg("Ordrenummer ikke fundet i vores system.");
       }
     } catch (err) {
       console.error(err);
