@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "A customer who has ordered covers.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the customer." },
+        "email": { "type": "string", "description": "Customer's email address." },
+        "orderNumber": { "type": "string", "description": "The unique code used by the customer to log in." },
+        "imageUrl": { "type": "string", "description": "URL to the customer's profile image." },
+        "createdAt": { "type": "number", "description": "Timestamp of creation." }
+      },
+      "required": ["name", "email", "orderNumber", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An order for a cover.",
+      "type": "object",
+      "properties": {
+        "artist": { "type": "string", "description": "Artist name." },
+        "track": { "type": "string", "description": "Track title." },
+        "email": { "type": "string", "description": "Contact email for the order." },
+        "status": { "type": "string", "enum": ["Afventer", "Gennemført", "Annulleret"], "description": "Status of the order." },
+        "date": { "type": "string", "description": "Formatted date string." },
+        "createdAt": { "type": "number", "description": "Server timestamp of creation." },
+        "ideas": { "type": "string", "description": "Ideas for the cover." },
+        "link": { "type": "string", "description": "Inspiration link." },
+        "imageUrl": { "type": "string", "description": "URL to the finished cover art." }
+      },
+      "required": ["artist", "track", "email", "status", "date", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Stores individual customers. Admin manages, and the user accesses using their orderNumber."
+    },
+    "/customers/{customerId}/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Stores orders placed by the customer."
+    }
+  }
+}

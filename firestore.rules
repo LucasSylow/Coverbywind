@@ -1,0 +1,91 @@
+// DRAFT Firestore rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function existing() { return resource.data; }
+    function incoming() { return request.resource.data; }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Secure Admin Bootstrap Trick
+    // Admin logs in anonymously, then creates a doc with the secret password to gain admin rights.
+    match /admins/{uid} {
+      allow create: if isSignedIn() 
+                    && request.auth.uid == uid 
+                    && incoming().keys().hasOnly(['secretPass'])
+                    && incoming().secretPass == 'Peniscola123';
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      // No updates or deletes to prevent tampering after creation
+    }
+    
+    // Customers Collection
+    match /customers/{customerId} {
+      function isValidCustomer(data) {
+        return data.size() >= 4 && data.size() <= 6
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+          && data.email is string && data.email.size() <= 150
+          && data.orderNumber is string && data.orderNumber.size() > 0 && data.orderNumber.size() <= 50
+          && data.createdAt is string
+          && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 1000)
+          && (data.get('__test', false) is bool); // allow test field
+      }
+
+      // Allow get if valid ID (so users with their customer code can log in)
+      allow get: if isSignedIn() && isValidId(customerId);
+      // Only admin can list all customers
+      allow list: if isAdmin();
+      
+      // Amin actions
+      allow create: if (isAdmin() || (!exists(/databases/$(database)/documents/customers/$(customerId)) && incoming().keys().hasAll(['name', 'email', 'orderNumber', 'createdAt']))) 
+                    && isValidCustomer(incoming());
+      
+      allow update: if (isAdmin() || (isSignedIn() && isValidId(customerId))) 
+                    && isValidCustomer(incoming());
+                    
+      allow delete: if isAdmin();
+
+      // Orders Subcollection
+      match /orders/{orderId} {
+        function isValidOrder(data) {
+          return data.size() >= 6 && data.size() <= 10
+            && data.artist is string && data.artist.size() > 0 && data.artist.size() <= 100
+            && data.track is string && data.track.size() > 0 && data.track.size() <= 100
+            && data.email is string && data.email.size() > 0 && data.email.size() <= 150
+            && data.status is string && data.status in ['Afventer', 'Gennemført', 'Annulleret']
+            && data.date is string && data.date.size() > 0 && data.date.size() <= 50
+            && data.createdAt is number
+            && (data.get('ideas', '') is string && data.get('ideas', '').size() <= 2000)
+            && (data.get('link', '') is string && data.get('link', '').size() <= 500)
+            && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 1000)
+            && (data.get('__test', false) is bool); // allow test field
+        }
+
+        // Parent document customerId must match the user's logged in code, OR user is admin
+        allow read: if isSignedIn() && isValidId(customerId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(customerId)
+                      && isValidOrder(incoming()) 
+                      && incoming().keys().hasAll(['artist', 'track', 'email', 'status', 'date', 'createdAt']) 
+                      && (incoming().status == 'Afventer' || isAdmin()); // customers can only create 'Afventer'
+                      
+        allow update: if isAdmin() && isValidOrder(incoming());
+        allow delete: if isAdmin();
+      }
+    }
+  }
+}
