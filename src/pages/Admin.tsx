@@ -281,7 +281,18 @@ export default function Admin() {
             artist: order.artist,
             track: order.track
           })
-        }).catch(err => console.error("Failed to trigger email notification:", err));
+        })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || "Email service error");
+          }
+          console.log("Email notification triggered successfully");
+        })
+        .catch(err => {
+          console.error("Failed to trigger email notification:", err);
+          alert("Ordren blev opdateret, men e-mailen kunne ikke sendes. Tjek venligst dine API-indstillinger.");
+        });
       }
       
       // Update local state temporarily for snappy UI
