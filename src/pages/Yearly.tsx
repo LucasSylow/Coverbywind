@@ -2,11 +2,13 @@ import { ArrowRight, Infinity, Percent, Users } from "lucide-react";
 import { useState, useEffect } from "react";
 import OrderPopup from "../components/OrderPopup";
 import LoginPopup from "../components/LoginPopup";
+import SubscriptionInfoPopup from "../components/SubscriptionInfoPopup";
 import { auth } from "../firebase.ts";
 import { onAuthStateChanged } from "firebase/auth";
 
 export default function Yearly() {
   const [isOrderPopupOpen, setIsOrderPopupOpen] = useState(false);
+  const [isSubscriptionInfoOpen, setIsSubscriptionInfoOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [user, setUser] = useState(auth.currentUser);
 
@@ -23,6 +25,10 @@ export default function Yearly() {
     } else {
       setIsOrderPopupOpen(true);
     }
+  };
+
+  const handleSubscriptionClick = () => {
+    setIsSubscriptionInfoOpen(true);
   };
 
   return (
@@ -52,7 +58,7 @@ export default function Yearly() {
           
           <div className="mt-auto md:mt-0">
             <button 
-              onClick={handleOrderClick}
+              onClick={handleSubscriptionClick}
               className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-[0.98]"
             >
               <span>Tilmeld abonnement</span>
@@ -105,6 +111,7 @@ export default function Yearly() {
       </div>
 
       <OrderPopup isOpen={isOrderPopupOpen} onClose={() => setIsOrderPopupOpen(false)} />
+      <SubscriptionInfoPopup isOpen={isSubscriptionInfoOpen} onClose={() => setIsSubscriptionInfoOpen(false)} />
       {isLoginOpen && <LoginPopup onClose={() => setIsLoginOpen(false)} />}
     </div>
   );
