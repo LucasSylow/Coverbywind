@@ -264,6 +264,17 @@ export default function Dashboard() {
       } else {
         console.warn("No email found for order notification");
       }
+
+      // Notify admin
+      fetch("/api/notify-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "new_order",
+          customerName: customerInfo?.name || "Kunde",
+          details: `Artist: ${newOrder.artist}, Track: ${newOrder.track}, Type: ${newOrder.deliveryType}`
+        })
+      }).catch(err => console.error("Admin notification failed", err));
       
       setNewOrder({ artist: "", track: "", email: "", ideas: "", link: "", deliveryType: "Standard" });
       setPriceAccepted(false);

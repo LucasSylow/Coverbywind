@@ -101,6 +101,17 @@ export default function PrivateChat({ customerId, customerName, customerEmail, i
             customerName: customerName
           })
         }).catch(err => console.error("Notification failed", err));
+      } else if (!isAdminMode) {
+        // Notify admin
+        fetch("/api/notify-admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "new_message",
+            customerName: actualName,
+            details: `Privat besked: ${msgText}`
+          })
+        }).catch(err => console.error("Admin notification failed", err));
       }
     } catch (err: any) {
       console.error(err);

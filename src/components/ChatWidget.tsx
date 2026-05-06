@@ -225,6 +225,19 @@ export default function ChatWidget({ isOpen, onClose, onUnreadCountChange }: Cha
       };
       console.log("Sending payload:", payload);
       await addDoc(collection(db, "messages"), payload);
+      
+      // Notify admin if a non-admin sends a message
+      if (!isUserAdmin) {
+        fetch("/api/notify-admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "new_message",
+            customerName: actualName || fallbackName,
+            details: `Fælleschat: ${msgText}`
+          })
+        }).catch(err => console.error("Admin notification failed", err));
+      }
     } catch (err: any) {
       alert("Fejl ved afsendelse: " + (err.message || String(err)));
       console.error(err);
