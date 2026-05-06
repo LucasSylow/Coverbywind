@@ -123,7 +123,7 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
     } catch (err: any) {
       console.error("Auth detail error:", err);
       if (err.code === 'auth/email-already-in-use') {
-        setErrorMsg("Denne e-mail er allerede i brug. Har du prøvet at logge ind i stedet?");
+        setErrorMsg("Denne e-mail er allerede i brug. Prøv at logge ind i stedet – din profil vil automatisk blive genoprettet.");
       } else if (err.code === 'auth/weak-password') {
         setErrorMsg("Adgangskoden skal være på mindst 6 tegn.");
       } else if (err.code === 'auth/operation-not-allowed') {
