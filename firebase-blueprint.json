@@ -7,14 +7,16 @@
       "properties": {
         "name": { "type": "string", "description": "Name of the customer." },
         "email": { "type": "string", "description": "Customer's email address." },
-        "orderNumber": { "type": "string", "description": "The unique code used by the customer to log in." },
+        "orderNumber": { "type": "string", "description": "The unique code used by the customer to log in (for annual customers) or Auth UID (for regular)." },
         "imageUrl": { "type": "string", "description": "URL to the customer's profile image." },
         "createdAt": { "type": "number", "description": "Timestamp of creation." },
         "expirationDate": { "type": "string", "description": "Optional expiration date" },
         "hasAcceptedTerms": { "type": "boolean", "description": "Whether the customer has accepted terms" },
-        "isSuspended": { "type": "boolean", "description": "Whether the customer's account is suspended" }
+        "isSuspended": { "type": "boolean", "description": "Whether the customer's account is suspended" },
+        "isRegular": { "type": "boolean", "description": "True if this is a standard pay-per-order customer" },
+        "type": { "type": "string", "enum": ["annual", "regular"], "description": "Subscription type" }
       },
-      "required": ["name", "email", "orderNumber", "createdAt"]
+      "required": ["name", "email", "createdAt"]
     },
     "Order": {
       "title": "Order",
@@ -24,13 +26,15 @@
         "artist": { "type": "string", "description": "Artist name." },
         "track": { "type": "string", "description": "Track title." },
         "email": { "type": "string", "description": "Contact email for the order." },
-        "status": { "type": "string", "enum": ["Afventer", "I gang", "Gennemført", "Annulleret"], "description": "Status of the order." },
+        "status": { "type": "string", "enum": ["Afventer", "I gang", "Gennemført", "Annulleret", "Afventer betaling"], "description": "Status of the order." },
         "date": { "type": "string", "description": "Formatted date string." },
         "createdAt": { "type": "number", "description": "Server timestamp of creation." },
         "inProgressAt": { "type": "number", "description": "Unix timestamp when the order was started." },
         "ideas": { "type": "string", "description": "Ideas for the cover." },
         "link": { "type": "string", "description": "Inspiration link." },
-        "imageUrl": { "type": "string", "description": "URL to the finished cover art." }
+        "imageUrl": { "type": "string", "description": "URL to the finished cover art." },
+        "customerType": { "type": "string", "enum": ["annual", "regular"], "description": "Type of customer who placed the order" },
+        "priceAccepted": { "type": "boolean", "description": "Whether the customer has accepted the price (for regular customers)" }
       },
       "required": ["artist", "track", "email", "status", "date", "createdAt"]
     },

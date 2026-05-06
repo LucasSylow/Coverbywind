@@ -15,7 +15,7 @@ enum OperationType {
   WRITE = 'write',
 }
 
-type Status = "Afventer" | "Gennemført" | "Annulleret" | "I gang";
+type Status = "Afventer" | "Gennemført" | "Annulleret" | "I gang" | "Afventer betaling";
 
 interface Order {
   id: string;
@@ -28,18 +28,21 @@ interface Order {
   link?: string;
   imageUrl?: string;
   downloadUrl?: string;
+  customerType?: "annual" | "regular";
+  priceAccepted?: boolean;
 }
 
 interface Customer {
   id: string;
   name: string;
   email: string;
-  orderNumber: string; // "Kode" they use to login
+  orderNumber: string; 
   imageUrl: string;
   createdAt: string;
   expirationDate?: string;
   hasAcceptedTerms?: boolean;
   isSuspended?: boolean;
+  type?: "annual" | "regular";
   orders: Order[];
 }
 
@@ -84,6 +87,7 @@ export default function Admin() {
                   createdAt: data.createdAt || "",
                   expirationDate: data.expirationDate || "",
                   isSuspended: data.isSuspended || false,
+                  type: data.type || "annual",
                   orders: []
                };
                
@@ -102,7 +106,9 @@ export default function Admin() {
                      ideas: orderData.ideas || "",
                      link: orderData.link || "",
                      imageUrl: orderData.imageUrl || "",
-                     downloadUrl: orderData.downloadUrl || ""
+                     downloadUrl: orderData.downloadUrl || "",
+                     customerType: orderData.customerType || customer.type,
+                     priceAccepted: orderData.priceAccepted || false
                    });
                  });
                } catch (err) {
@@ -259,7 +265,26 @@ export default function Admin() {
       }
       await updateDoc(orderRef, updateData);
       
-      // Update local state temporarily for snappy UI (snapshot might take a second since orders aren't hooked via real-time here)
+      // Send email notification via backend
+      const customer = customers.find(c => c.id === customerId);
+      const order = customer?.orders.find(o => o.id === orderId);
+
+      if (customer && order) {
+        fetch("/api/send-status-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: customer.email,
+            customerName: customer.name,
+            orderId: order.id,
+            status: newStatus,
+            artist: order.artist,
+            track: order.track
+          })
+        }).catch(err => console.error("Failed to trigger email notification:", err));
+      }
+      
+      // Update local state temporarily for snappy UI
       setCustomers(customers.map(c => {
         if (c.id === customerId) {
           return {
@@ -312,13 +337,19 @@ export default function Admin() {
         return "bg-red-500/10 text-red-500 border-red-500/20";
       case "I gang":
         return "bg-orange-500/10 text-orange-500 border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.4)] animate-pulse";
+      case "Afventer betaling":
+        return "bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]";
     }
   };
 
   const pendingOrders = customers
     .flatMap(c => c.orders.map(o => ({ ...o, customerName: c.name, customerEmail: c.email, customerId: c.id })))
-    .filter(o => o.status === "Afventer" || o.status === "I gang")
+    .filter(o => o.status === "Afventer" || o.status === "I gang" || o.status === "Afventer betaling")
     .sort((a, b) => {
+      // Prioritize "Afventer betaling" as it requires admin action for payment verification
+      if (a.status === "Afventer betaling" && b.status !== "Afventer betaling") return -1;
+      if (a.status !== "Afventer betaling" && b.status === "Afventer betaling") return 1;
+      
       if (a.status === "I gang" && b.status !== "I gang") return -1;
       if (a.status !== "I gang" && b.status === "I gang") return 1;
       return new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -376,7 +407,12 @@ export default function Admin() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pendingOrders.map(order => (
-              <div key={order.id} className="bg-[#111111] border border-zinc-800/80 rounded-[1.5rem] p-5 shadow-lg">
+              <div key={order.id} className={`bg-[#111111] border ${order.customerType === "regular" ? "border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)]" : "border-zinc-800/80"} rounded-[1.5rem] p-5 shadow-lg relative overflow-hidden`}>
+                {order.customerType === "regular" && (
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-amber-500 text-black text-[10px] font-bold uppercase rounded-bl-xl tracking-tighter">
+                    Standard (Pay-per-order)
+                  </div>
+                )}
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-white">{order.track}</h3>
                   <span className="text-xs font-mono text-zinc-500">#{order.id}</span>
@@ -385,6 +421,14 @@ export default function Admin() {
                   <div>Artist: <span className="text-white font-medium">{order.artist}</span></div>
                   <div>Kunde: <span className="text-white font-medium">{order.customerName}</span> ({order.customerEmail})</div>
                   <div>Dato: {order.date}</div>
+                  {order.customerType === "regular" && (
+                    <div className="mt-1 pt-1 flex items-center gap-2">
+                      <span className="text-amber-400 text-xs font-bold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                        {order.priceAccepted ? "Pris accepteret (499 kr.)" : "Venter på accept"}
+                      </span>
+                      <span className="text-zinc-500 text-[10px italic]">Betaling afventer</span>
+                    </div>
+                  )}
                   {order.ideas && (
                     <div className="mt-2 pt-2 border-t border-zinc-800">
                       <span className="text-xs uppercase tracking-wider font-bold text-zinc-500 block mb-1">Idéer/Koncepter</span>
@@ -406,6 +450,7 @@ export default function Admin() {
                   className={`w-full px-3 py-2 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                 >
                   <option value="Afventer" className="bg-zinc-900 text-yellow-500">Afventer</option>
+                  <option value="Afventer betaling" className="bg-zinc-900 text-amber-500">Afventer betaling</option>
                   <option value="I gang" className="bg-zinc-900 text-orange-500">I gang</option>
                   <option value="Gennemført" className="bg-zinc-900 text-green-500">Gennemført</option>
                   <option value="Annulleret" className="bg-zinc-900 text-red-500">Annulleret</option>
@@ -563,8 +608,11 @@ export default function Admin() {
                        </div>
                      ) : (
                        <div>
-                         <h3 className="text-xl font-bold text-white leading-tight flex items-center gap-2">
+                         <h3 className="text-xl font-bold text-white leading-tight flex items-center gap-2 flex-wrap">
                            {customer.name}
+                           <span className={`text-[10px] uppercase px-2 py-0.5 rounded-full font-bold tracking-wide ${customer.type === "regular" ? "bg-amber-500/20 text-amber-500 border border-amber-500/20" : "bg-purple-500/20 text-purple-500 border border-purple-500/20"}`}>
+                             {customer.type === "regular" ? "Standard" : "Årsabonnement"}
+                           </span>
                            {customerUnreadMap[customer.id] && (
                              <span className="bg-purple-600 text-white text-[10px] uppercase px-2 py-0.5 rounded-full font-bold tracking-wide shadow-[0_0_10px_rgba(168,85,247,0.4)]">
                                Ny besked
@@ -656,6 +704,7 @@ export default function Admin() {
                                    className={`px-3 py-1.5 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                                  >
                                    <option value="Afventer" className="bg-zinc-900 text-yellow-500">Afventer</option>
+                                   <option value="Afventer betaling" className="bg-zinc-900 text-amber-500">Afventer betaling</option>
                                    <option value="I gang" className="bg-zinc-900 text-orange-500">I gang</option>
                                    <option value="Gennemført" className="bg-zinc-900 text-green-500">Gennemført</option>
                                    <option value="Annulleret" className="bg-zinc-900 text-red-500">Annulleret</option>

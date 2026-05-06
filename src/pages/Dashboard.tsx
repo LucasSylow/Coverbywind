@@ -17,7 +17,7 @@ enum OperationType {
   WRITE = 'write',
 }
 
-type Status = "Afventer" | "Gennemført" | "Annulleret" | "I gang";
+type Status = "Afventer" | "Gennemført" | "Annulleret" | "I gang" | "Afventer betaling";
 
 interface Cover {
   id: string;
@@ -33,10 +33,22 @@ interface Cover {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [covers, setCovers] = useState<Cover[]>([]);
-  const [customerInfo, setCustomerInfo] = useState<{name: string, orderNumber: string, imageUrl: string, expirationDate?: string, hasAcceptedTerms?: boolean, isSuspended?: boolean} | null>(null);
+  const [customerInfo, setCustomerInfo] = useState<{
+    name: string, 
+    email?: string,
+    orderNumber: string, 
+    imageUrl: string, 
+    expirationDate?: string, 
+    hasAcceptedTerms?: boolean, 
+    isSuspended?: boolean,
+    isRegular?: boolean,
+    type?: "annual" | "regular"
+  } | null>(null);
+  const [priceAccepted, setPriceAccepted] = useState(false);
 
   useEffect(() => {
     const code = localStorage.getItem("cbw_customer_code");
+    const type = localStorage.getItem("cbw_customer_type") as "annual" | "regular" | null;
     if (!code) {
       navigate("/");
       return;
@@ -51,7 +63,7 @@ export default function Dashboard() {
              const data = docSnap.data();
              const isExpired = data.expirationDate ? new Date(data.expirationDate).setHours(23, 59, 59, 999) < new Date().getTime() : false;
              
-             if (isExpired && !data.isSuspended) {
+             if (isExpired && !data.isSuspended && data.type !== "regular") {
                 // Auto-suspend in firestore if it's expired but not marked as suspended
                 try {
                   await setDoc(docRef, { isSuspended: true }, { merge: true });
@@ -61,14 +73,38 @@ export default function Dashboard() {
 
              setCustomerInfo({
                name: data.name || "Kunde",
+               email: data.email || "",
                orderNumber: data.orderNumber || code,
                imageUrl: data.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png",
                expirationDate: data.expirationDate || "",
                hasAcceptedTerms: data.hasAcceptedTerms || false,
-               isSuspended: data.isSuspended || false
+               isSuspended: data.isSuspended || false,
+               isRegular: data.isRegular || data.type === "regular",
+               type: data.type || type || "annual"
              });
           } else {
+             // Fallback for document missing (e.g. failed creation during registration)
+             const currentUser = auth.currentUser;
+             if (currentUser && currentUser.uid === code) {
+                try {
+                   await setDoc(docRef, {
+                      name: currentUser.displayName || currentUser.email?.split('@')[0] || "Ny kunde",
+                      email: currentUser.email || "",
+                      createdAt: Date.now(),
+                      isRegular: true,
+                      type: "regular",
+                      orderNumber: currentUser.uid,
+                      hasAcceptedTerms: false
+                   });
+                   // Recursive call or reload to populate state
+                   window.location.reload();
+                   return;
+                } catch(e) {
+                   console.error("Fallback doc creation failed", e);
+                }
+             }
              localStorage.removeItem("cbw_customer_code");
+             localStorage.removeItem("cbw_customer_type");
              navigate("/");
              return;
           }
@@ -129,18 +165,45 @@ export default function Dashboard() {
 
     try {
       const orderId = `CBW-${Math.floor(10000 + Math.random() * 90000)}`;
+      const status: Status = customerInfo?.type === "regular" ? "Afventer betaling" : "Afventer";
       await setDoc(doc(db, `customers/${code}/orders`, orderId), {
         artist: newOrder.artist,
         track: newOrder.track,
         email: newOrder.email,
-        status: "Afventer",
+        status: status,
         date: new Date().toLocaleDateString("da-DK"),
         createdAt: Date.now(),
         ideas: newOrder.ideas,
-        link: newOrder.link
+        link: newOrder.link,
+        customerType: customerInfo?.type || "annual",
+        priceAccepted: customerInfo?.type === "regular" ? true : false
       });
       
+      // Trigger confirmation email via backend
+      const targetEmail = newOrder.email || customerInfo?.email;
+      
+      if (targetEmail) {
+        fetch("/api/send-status-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: targetEmail,
+            customerName: customerInfo?.name || "Kunde",
+            orderId: orderId,
+            status: status,
+            artist: newOrder.artist,
+            track: newOrder.track
+          })
+        })
+        .then(res => res.json())
+        .then(data => console.log("Email service response:", data))
+        .catch(err => console.error("Failed to send confirmation email:", err));
+      } else {
+        console.warn("No email found for order notification");
+      }
+      
       setNewOrder({ artist: "", track: "", email: "", ideas: "", link: "" });
+      setPriceAccepted(false);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
     } catch (err) {
@@ -158,6 +221,8 @@ export default function Dashboard() {
         return <XCircle className="w-5 h-5 text-red-500" />;
       case "I gang":
         return <Clock className="w-5 h-5 text-orange-500 animate-spin-slow" />;
+      case "Afventer betaling":
+        return <Clock className="w-5 h-5 text-amber-500" />;
     }
   };
 
@@ -171,6 +236,8 @@ export default function Dashboard() {
         return "bg-red-500/10 text-red-500 border-red-500/20";
       case "I gang":
         return "bg-orange-500/10 text-orange-500 border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.4)] animate-pulse";
+      case "Afventer betaling":
+        return "bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]";
     }
   };
 
@@ -181,7 +248,7 @@ export default function Dashboard() {
   };
 
   const allPreviousCovers = covers;
-  const waitingCovers = covers.filter((c) => c.status === "Afventer" || c.status === "I gang");
+  const waitingCovers = covers.filter((c) => c.status === "Afventer" || c.status === "I gang" || c.status === "Afventer betaling");
 
   const getProgressPercentage = (inProgressAt?: number) => {
     if (!inProgressAt) return 5; // Default some progress
@@ -252,32 +319,34 @@ export default function Dashboard() {
 
       {!customerInfo?.isSuspended && (
         <>
-          <div className="bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 shadow-inner">
-                <MessageSquare className="w-6 h-6" />
+          {customerInfo?.type !== "regular" && (
+            <div className="bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 shadow-inner">
+                  <MessageSquare className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-1">Fælleschat</h2>
+                  <p className="text-sm text-zinc-400">Chat med admin og andre brugere</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-white mb-1">Fælleschat</h2>
-                <p className="text-sm text-zinc-400">Chat med admin og andre brugere</p>
-              </div>
-            </div>
 
-            <button 
-              onClick={() => setIsChatOpen(true)}
-              className="relative z-10 w-full sm:w-auto overflow-hidden rounded-xl bg-blue-600 px-8 py-3 font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all hover:scale-[1.02] active:scale-95 group"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
-              <div className="flex items-center justify-center gap-2 relative z-10">
-                <span>Åben fælleschat</span>
-                {unreadCount > 0 && (
-                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg">
-                    {unreadCount}
-                  </span>
-                )}
-              </div>
-            </button>
-          </div>
+              <button 
+                onClick={() => setIsChatOpen(true)}
+                className="relative z-10 w-full sm:w-auto overflow-hidden rounded-xl bg-blue-600 px-8 py-3 font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all hover:scale-[1.02] active:scale-95 group"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
+                <div className="flex items-center justify-center gap-2 relative z-10">
+                  <span>Åben fælleschat</span>
+                  {unreadCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg">
+                      {unreadCount}
+                    </span>
+                  )}
+                </div>
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column (Orders info) */}
@@ -316,6 +385,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-orange-400/90 text-sm bg-orange-500/10 border border-orange-500/20 p-3 rounded-xl flex items-start gap-2">
                         <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-orange-500" />
                         <p>Dit coverbillede er blevet godkendt og er under behandling, hold øje det er snart klar, downloadlinket er kun gyldigt i 3 dage når det er færdigt</p>
+                      </div>
+                    )}
+                    {cover.status === 'Afventer betaling' && (
+                      <div className="mt-2 text-amber-400/90 text-sm bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex items-start gap-3 shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+                        <Clock className="w-5 h-5 shrink-0 mt-0.5 text-amber-500" />
+                        <div>
+                          <p className="font-bold mb-1">Afventer betaling</p>
+                          <p>Din ordre er modtaget, men vi afventer betaling før vi kan starte. Aftal venligst betaling via chatten nedenfor.</p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -396,7 +474,12 @@ export default function Dashboard() {
             {orderSuccess && (
               <div className="mb-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm leading-relaxed flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
-                <p>Bestilling modtaget, du vil modtage coveret på din mail indenfor 5 hverdage, skulle vi have spørgsmål vil vi ligeledes kontakte dig på den angivet mail</p>
+                <p>
+                  {customerInfo?.type === "regular" 
+                    ? "Bestilling modtaget, vi kan først gå i gang med coveret når vi har modtaget betalingen, betaling aftales på chatten på panelet her."
+                    : "Bestilling modtaget, du kan se status på ordren herpå panelet, det er dit eget ansvar at holde øje med hvornår det er klar til download, download linket er kun gyldigt i 3 dage, forventet leveringstid er op til 5 hverdage."
+                  }
+                </p>
               </div>
             )}
 
@@ -465,9 +548,37 @@ export default function Dashboard() {
                 />
               </div>
 
+              {customerInfo?.type === "regular" && (
+                <div className="mt-2 space-y-4">
+                  <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                    <p className="text-purple-300 text-sm font-medium mb-1">Pris for cover design</p>
+                    <p className="text-2xl font-bold text-white">499 kr.</p>
+                    <p className="text-zinc-400 text-xs mt-2 italic">
+                      Kontakt os venligst via chatten nedenfor for at aftale betaling, før din ordre kan godkendes og påbegyndes.
+                    </p>
+                  </div>
+
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className="relative flex items-center h-5 mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={priceAccepted}
+                        onChange={(e) => setPriceAccepted(e.target.checked)}
+                        className="peer h-5 w-5 rounded border-zinc-800 bg-[#0a0a0a] text-purple-600 focus:ring-purple-500 transition-all"
+                        required
+                      />
+                    </div>
+                    <span className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors">
+                      Jeg accepterer prisen på 499 kr. og forstår at arbejdet først påbegyndes efter betaling.
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <button
                 type="submit"
-                className="mt-2 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl px-4 py-4 flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] active:scale-[0.98]"
+                disabled={(customerInfo?.type === "regular" && !priceAccepted)}
+                className="mt-2 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl px-4 py-4 flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Opret bestilling</span>
                 <Send className="w-5 h-5" />
@@ -476,7 +587,9 @@ export default function Dashboard() {
           </div>
           
           <div className="mt-8">
-            <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onUnreadCountChange={setUnreadCount} />
+            {customerInfo?.type !== "regular" && (
+              <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onUnreadCountChange={setUnreadCount} />
+            )}
           </div>
         </div>
 

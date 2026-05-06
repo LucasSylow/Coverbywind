@@ -1,9 +1,29 @@
 import { Maximize, FileImage, RefreshCcw, Clock, Zap, Star, ArrowRight, Infinity, Percent, Users } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import OrderPopup from "../components/OrderPopup";
+import LoginPopup from "../components/LoginPopup";
+import { auth } from "../firebase.ts";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function Prices() {
   const [isOrderPopupOpen, setIsOrderPopupOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [user, setUser] = useState(auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleOrderClick = () => {
+    if (!user || user.isAnonymous) {
+      setIsLoginOpen(true);
+    } else {
+      setIsOrderPopupOpen(true);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center pt-8 pb-24">
@@ -70,7 +90,7 @@ export default function Prices() {
           </ul>
 
           <button 
-            onClick={() => setIsOrderPopupOpen(true)}
+            onClick={handleOrderClick}
             className="w-full py-3.5 bg-zinc-100 hover:bg-white text-black font-bold rounded-xl transition-all shadow-lg active:scale-[0.98] mt-auto text-center block relative z-10"
           >
             Bestil Nu
@@ -137,7 +157,7 @@ export default function Prices() {
           </ul>
 
           <button 
-            onClick={() => setIsOrderPopupOpen(true)}
+            onClick={handleOrderClick}
             className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-[0.98] mt-auto text-center block relative z-10"
           >
             Bestil Nu
@@ -164,7 +184,7 @@ export default function Prices() {
             
             <div className="mt-auto md:mt-0">
               <button 
-                onClick={() => setIsOrderPopupOpen(true)}
+                onClick={handleOrderClick}
                 className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-[0.98]"
               >
                 <span>Tilmeld abonnement</span>
@@ -219,6 +239,7 @@ export default function Prices() {
       </div>
 
       <OrderPopup isOpen={isOrderPopupOpen} onClose={() => setIsOrderPopupOpen(false)} />
+      {isLoginOpen && <LoginPopup onClose={() => setIsLoginOpen(false)} />}
     </div>
   );
 }

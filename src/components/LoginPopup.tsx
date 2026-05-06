@@ -12,6 +12,8 @@ enum OperationType {
 }
 
 export default function LoginPopup({ onClose }: { onClose: () => void }) {
+  const [view, setView] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [subCode, setSubCode] = useState("");
@@ -27,15 +29,13 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
     try {
       if (auth.currentUser) {
         try {
-          // Attempt to authenticate as admin securely without exposing password in frontend code
           await setDoc(doc(db, "admins", auth.currentUser.uid), { secretPass: code });
           localStorage.setItem("cbw_admin_code", "true");
           navigate("/admin");
           onClose();
-          return; // Exit early if admin authentication succeeded
+          return;
         } catch (err) {
-          // If this fails, the code is either wrong OR it's just a regular user trying to login.
-          // Meaning we swallow the error and proceed to check if it's a customer.
+          // Fall through to customer check
         }
       }
 
@@ -44,7 +44,9 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
+        const data = docSnap.data();
         localStorage.setItem("cbw_customer_code", cleanCode);
+        localStorage.setItem("cbw_customer_type", data.type || "annual");
         navigate("/dashboard");
         onClose();
       } else {
@@ -60,25 +62,74 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
-
     setIsLoading(true);
     setErrorMsg(null);
+
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // Wait, what should happen after email login? Let's assume they go to dashboard.
-      // But dashboard checks for 'cbw_customer_code'.
-      // If we just want them to log in, we might just reload or send to /dashboard.
+      if (view === "login") {
+        if (!email || !password) return;
+        const userCred = await signInWithEmailAndPassword(auth, email, password);
+        const uid = userCred.user.uid;
+        
+        const docRef = doc(db, "customers", uid);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          localStorage.setItem("cbw_customer_code", uid);
+          localStorage.setItem("cbw_customer_type", data.type || "regular");
+        } else {
+          // HEAL: If user exists in Auth but not in Firestore, create the doc
+          await setDoc(doc(db, "customers", uid), {
+            name: email.split('@')[0], // Fallback name
+            email: email,
+            createdAt: Date.now(),
+            isRegular: true,
+            type: "regular",
+            orderNumber: uid,
+            hasAcceptedTerms: false
+          });
+          localStorage.setItem("cbw_customer_code", uid);
+          localStorage.setItem("cbw_customer_type", "regular");
+        }
+      } else {
+        if (!email || !password || !name) return;
+        const { createUserWithEmailAndPassword } = await import("firebase/auth");
+        const userCred = await createUserWithEmailAndPassword(auth, email, password);
+        const uid = userCred.user.uid;
+
+        try {
+          await setDoc(doc(db, "customers", uid), {
+            name,
+            email,
+            createdAt: Date.now(),
+            isRegular: true,
+            type: "regular",
+            orderNumber: uid,
+            hasAcceptedTerms: false
+          });
+        } catch (dbErr) {
+          console.error("Database detail error:", dbErr);
+          // If Firestore fails (e.g. permission), the Auth user still exists.
+          // We still set values so they can at least get to dashboard where fallback might try again.
+        }
+
+        localStorage.setItem("cbw_customer_code", uid);
+        localStorage.setItem("cbw_customer_type", "regular");
+      }
+      
       navigate("/dashboard");
       onClose();
     } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/operation-not-allowed') {
-        setErrorMsg("Vær venlig at aktivere Email/Adgangskode i Firebase Authentication.");
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setErrorMsg("Ugyldig e-mail eller adgangskode.");
+      console.error("Auth detail error:", err);
+      if (err.code === 'auth/email-already-in-use') {
+        setErrorMsg("Denne e-mail er allerede i brug. Har du prøvet at logge ind i stedet?");
+      } else if (err.code === 'auth/weak-password') {
+        setErrorMsg("Adgangskoden skal være på mindst 6 tegn.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setErrorMsg("Email/Password login er ikke aktiveret i Firebase Console.");
       } else {
-        setErrorMsg("Kunne ikke logge ind. Prøv venligst igen.");
+        setErrorMsg("Ugyldig e-mail eller adgangskode.");
       }
     } finally {
       setIsLoading(false);
@@ -124,19 +175,40 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
 
         <div className="flex flex-col md:flex-row gap-8 relative z-0">
           
-          {/* Main Box - Log ind på din konto */}
+          {/* Main Box - Log ind / Opret konto */}
           <div className="flex-1 flex flex-col justify-center">
             <div className="mb-8">
               <div className="w-12 h-12 bg-purple-500/10 text-purple-400 rounded-2xl flex items-center justify-center mb-6">
                 <ShieldCheck className="w-6 h-6" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Log ind på din konto</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {view === "login" ? "Log ind på din konto" : "Opret din konto"}
+              </h2>
               <p className="text-zinc-400 text-sm">
-                Indtast din e-mail og adgangskode for at få adgang til din konto.
+                {view === "login" 
+                  ? "Indtast din e-mail og adgangskode for at få adgang til din konto." 
+                  : "Udfyld nedenstående for at oprette din kundekonto og bestille cover."}
               </p>
             </div>
 
             <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
+              {view === "register" && (
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="name" className="text-sm font-medium text-zinc-300">
+                    Fulde navn
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    placeholder="Dit navn"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-[#0a0a0a] border border-zinc-800 text-white placeholder-zinc-600 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                    required
+                  />
+                </div>
+              )}
+
               <div className="flex flex-col gap-2">
                 <label htmlFor="email" className="text-sm font-medium text-zinc-300">
                   E-mail
@@ -169,17 +241,27 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
 
               <button
                 type="submit"
-                disabled={isLoading || !email || !password}
+                disabled={isLoading || !email || !password || (view === "register" && !name)}
                 className="mt-4 w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
                   <>
-                    <span>Log ind</span>
+                    <span>{view === "login" ? "Log ind" : "Opret konto"}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setView(view === "login" ? "register" : "login")}
+                className="text-sm text-purple-400 hover:text-purple-300 transition-colors text-center mt-2"
+              >
+                {view === "login" 
+                  ? "Har du ikke en konto? Opret her" 
+                  : "Har du allerede en konto? Log ind her"}
               </button>
             </form>
           </div>
