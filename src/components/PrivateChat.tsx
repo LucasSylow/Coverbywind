@@ -24,10 +24,11 @@ interface ChatMessage {
 interface PrivateChatProps {
   customerId: string;
   customerName: string;
+  customerEmail?: string; // Optional: Only used by Admin to notify customer
   isAdminMode: boolean; // true if admin is viewing, false if customer is viewing
 }
 
-export default function PrivateChat({ customerId, customerName, isAdminMode }: PrivateChatProps) {
+export default function PrivateChat({ customerId, customerName, customerEmail, isAdminMode }: PrivateChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,18 @@ export default function PrivateChat({ customerId, customerName, isAdminMode }: P
         createdAt: Date.now()
       };
       await addDoc(collection(db, "customers", customerId, "messages"), payload);
+
+      // Notify customer if admin sends a message
+      if (isAdminMode && customerEmail) {
+        fetch("/api/send-chat-notification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: customerEmail,
+            customerName: customerName
+          })
+        }).catch(err => console.error("Notification failed", err));
+      }
     } catch (err: any) {
       console.error(err);
       handleFirestoreError(err, 'write' as any, `customers/${customerId}/messages`);

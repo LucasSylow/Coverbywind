@@ -44,6 +44,9 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
+        const { signInAnonymously } = await import("firebase/auth");
+        await signInAnonymously(auth);
+        
         const data = docSnap.data();
         localStorage.setItem("cbw_customer_code", cleanCode);
         localStorage.setItem("cbw_customer_type", data.type || "annual");
@@ -154,7 +157,7 @@ export default function LoginPopup({ onClose }: { onClose: () => void }) {
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-5xl bg-[#111111] border border-zinc-800 rounded-3xl p-8 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-[#111111] border border-zinc-800 rounded-3xl p-6 md:p-10 shadow-2xl custom-scrollbar"
       >
         {/* Glow effect */}
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-50" />

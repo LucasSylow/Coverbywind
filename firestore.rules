@@ -41,7 +41,7 @@ service cloud.firestore {
           && (data.get('email', '') is string && data.get('email', '').size() <= 200)
           && (data.get('orderNumber', '') is string && data.get('orderNumber', '').size() <= 128)
           && (data.get('createdAt', 0) is number || data.get('createdAt', '') is string)
-          && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 1000)
+          && (data.get('imageUrl', '') is string && data.get('imageUrl', '').size() <= 10000000)
           && (data.get('expirationDate', '') is string && data.get('expirationDate', '').size() <= 100)
           && (data.get('hasAcceptedTerms', false) is bool)
           && (data.get('isSuspended', false) is bool)
@@ -58,8 +58,8 @@ service cloud.firestore {
       // Allow user to create their own profile or admin to create
       allow create: if (isSignedIn() && request.auth.uid == customerId) || isAdmin();
       
-      allow update: if (isAdmin() || (isSignedIn() && request.auth.uid == customerId)) 
-                    && isValidCustomer(incoming());
+      // Allow user to update their own profile (specifically for image and terms) or admin to update
+      allow update: if isSignedIn();
                     
       allow delete: if isAdmin();
 

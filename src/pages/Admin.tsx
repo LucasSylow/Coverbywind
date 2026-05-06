@@ -13,10 +13,8 @@ import {
   Image as ImageIcon,
   Ban,
   Search,
-  Key,
 } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
-import { sendPasswordResetEmail } from "firebase/auth";
 import {
   collection,
   doc,
@@ -319,22 +317,6 @@ export default function Admin() {
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `customers/${id}`);
-    }
-  };
-
-  const handleResetPassword = async (email: string) => {
-    if (
-      confirm(
-        `Vil du sende en mail til ${email} med et link til at nulstille adgangskoden?`,
-      )
-    ) {
-      try {
-        await sendPasswordResetEmail(auth, email);
-        alert(`Nulstillings-mail er sendt til ${email}`);
-      } catch (err: any) {
-        console.error("Reset pwd error:", err);
-        alert("Fejl ved afsendelse af mail: " + err.message);
-      }
     }
   };
 
@@ -921,22 +903,13 @@ export default function Admin() {
 
                   <div className="flex items-center justify-between w-full sm:w-auto gap-3">
                     {editingCustomerId !== customer.id && (
-                      <>
-                        <button
-                          onClick={() => handleResetPassword(customer.email)}
-                          className="p-2 text-zinc-500 hover:text-amber-400 hover:bg-amber-400/10 rounded-xl transition-colors"
-                          title="Nulstil adgangskode (send mail)"
-                        >
-                          <Key className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleStartEdit(customer)}
-                          className="p-2 text-zinc-500 hover:text-purple-400 hover:bg-purple-400/10 rounded-xl transition-colors"
-                          title="Rediger kunde"
-                        >
-                          <Edit2 className="w-5 h-5" />
-                        </button>
-                      </>
+                      <button
+                        onClick={() => handleStartEdit(customer)}
+                        className="p-2 text-zinc-500 hover:text-purple-400 hover:bg-purple-400/10 rounded-xl transition-colors"
+                        title="Rediger kunde"
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
                     )}
                     <button
                       onClick={() =>
@@ -1159,6 +1132,7 @@ export default function Admin() {
                       <PrivateChat
                         customerId={customer.id}
                         customerName={customer.name}
+                        customerEmail={customer.email}
                         isAdminMode={true}
                       />
                     </div>

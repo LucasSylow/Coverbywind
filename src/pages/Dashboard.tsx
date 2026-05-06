@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon, LogOut, MessageSquare } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon, LogOut, MessageSquare, Camera } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
 import { collection, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
@@ -58,79 +58,98 @@ export default function Dashboard() {
       if (user) {
         try {
           const docRef = doc(db, "customers", code);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-             const data = docSnap.data();
-             const isExpired = data.expirationDate ? new Date(data.expirationDate).setHours(23, 59, 59, 999) < new Date().getTime() : false;
-             
-             if (isExpired && !data.isSuspended && data.type !== "regular") {
-                // Auto-suspend in firestore if it's expired but not marked as suspended
+          
+          const unsubCustomer = onSnapshot(docRef, async (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              const isExpired = data.expirationDate
+                ? new Date(data.expirationDate).setHours(23, 59, 59, 999) <
+                  new Date().getTime()
+                : false;
+
+              if (isExpired && !data.isSuspended && data.type !== "regular") {
                 try {
                   await setDoc(docRef, { isSuspended: true }, { merge: true });
-                } catch(e) { console.error(e) }
-                data.isSuspended = true;
-             }
-
-             setCustomerInfo({
-               name: data.name || "Kunde",
-               email: data.email || "",
-               orderNumber: data.orderNumber || code,
-               imageUrl: data.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png",
-               expirationDate: data.expirationDate || "",
-               hasAcceptedTerms: data.hasAcceptedTerms || false,
-               isSuspended: data.isSuspended || false,
-               isRegular: data.isRegular || data.type === "regular",
-               type: data.type || type || "annual"
-             });
-          } else {
-             // Fallback for document missing (e.g. failed creation during registration)
-             const currentUser = auth.currentUser;
-             if (currentUser && currentUser.uid === code) {
-                try {
-                   await setDoc(docRef, {
-                      name: currentUser.displayName || currentUser.email?.split('@')[0] || "Ny kunde",
-                      email: currentUser.email || "",
-                      createdAt: Date.now(),
-                      isRegular: true,
-                      type: "regular",
-                      orderNumber: currentUser.uid,
-                      hasAcceptedTerms: false
-                   });
-                   // Recursive call or reload to populate state
-                   window.location.reload();
-                   return;
-                } catch(e) {
-                   console.error("Fallback doc creation failed", e);
+                } catch (e) {
+                  console.error(e);
                 }
-             }
-             localStorage.removeItem("cbw_customer_code");
-             localStorage.removeItem("cbw_customer_type");
-             navigate("/");
-             return;
-          }
-          
-          const unsubOrders = onSnapshot(collection(db, `customers/${code}/orders`), (snapshot) => {
-            const list: Cover[] = [];
-            snapshot.docs.forEach(d => {
-               const data = d.data();
-               list.push({
-                 id: d.id,
-                 artist: data.artist || "",
-                 track: data.track || "",
-                 status: data.status || "Afventer",
-                 date: data.date || "",
-                 imageUrl: data.imageUrl || "",
-                 downloadUrl: data.downloadUrl || "",
-                 inProgressAt: data.inProgressAt
-               });
-            });
-            // basic sort: newest first assume created format allows sort
-            setCovers(list.reverse());
-          }, err => handleFirestoreError(err, OperationType.LIST, `customers/${code}/orders`));
-          
-          return () => unsubOrders();
+                data.isSuspended = true;
+              }
+
+              setCustomerInfo({
+                name: data.name || "Kunde",
+                email: data.email || "",
+                orderNumber: data.orderNumber || code,
+                imageUrl:
+                  data.imageUrl ||
+                  "https://cdn-icons-png.flaticon.com/512/9131/9131529.png",
+                expirationDate: data.expirationDate || "",
+                hasAcceptedTerms: data.hasAcceptedTerms || false,
+                isSuspended: data.isSuspended || false,
+                isRegular: data.isRegular || data.type === "regular",
+                type: data.type || (type as "annual" | "regular") || "annual",
+              });
+            } else {
+              // Fallback for document missing
+              const currentUser = auth.currentUser;
+              if (currentUser && currentUser.uid === code) {
+                try {
+                  await setDoc(docRef, {
+                    name:
+                      currentUser.displayName ||
+                      currentUser.email?.split("@")[0] ||
+                      "Ny kunde",
+                    email: currentUser.email || "",
+                    createdAt: Date.now(),
+                    isRegular: true,
+                    type: "regular",
+                    orderNumber: currentUser.uid,
+                    hasAcceptedTerms: false,
+                  });
+                } catch (e) {
+                  console.error("Fallback doc creation failed", e);
+                }
+              } else {
+                localStorage.removeItem("cbw_customer_code");
+                localStorage.removeItem("cbw_customer_type");
+                navigate("/");
+              }
+            }
+          });
+
+          const unsubOrders = onSnapshot(
+            collection(db, `customers/${code}/orders`),
+            (snapshot) => {
+              const list: Cover[] = [];
+              snapshot.docs.forEach((d) => {
+                const data = d.data();
+                list.push({
+                  id: d.id,
+                  artist: data.artist || "",
+                  track: data.track || "",
+                  status: data.status || "Afventer",
+                  date: data.date || "",
+                  imageUrl: data.imageUrl || "",
+                  downloadUrl: data.downloadUrl || "",
+                  inProgressAt: data.inProgressAt,
+                });
+              });
+              setCovers(list.reverse());
+            },
+            (err) =>
+              handleFirestoreError(
+                err,
+                OperationType.LIST,
+                `customers/${code}/orders`,
+              ),
+          );
+
+          return () => {
+            unsubCustomer();
+            unsubOrders();
+          };
         } catch (err) {
-           console.error("Error loading dashboard", err);
+          console.error("Error loading dashboard", err);
         }
       }
     });
@@ -149,6 +168,43 @@ export default function Dashboard() {
   const [orderError, setOrderError] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const code = localStorage.getItem("cbw_customer_code");
+    if (!file || !code) return;
+
+    // Firestore document limit is 1MB. Base64 is ~33% larger than binary.
+    // So binary file should be max ~700KB to stay safe within 1MB.
+    if (file.size > 700 * 1024) {
+      alert("Billedet er for stort. Vælg venligst et billede under 700KB.");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64String = reader.result as string;
+          const docRef = doc(db, "customers", code);
+          await setDoc(docRef, { imageUrl: base64String }, { merge: true });
+        } catch (err) {
+          console.error("Upload failed", err);
+          handleFirestoreError(err, OperationType.WRITE, `customers/${code}`);
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Failed to upload profile image", err);
+      alert("Fejl ved upload af profilbillede.");
+      setIsUploading(false);
+    }
+  };
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,11 +329,35 @@ export default function Dashboard() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 blur-[80px] rounded-full pointer-events-none" />
         
         <div className="flex items-center gap-6 relative z-10 w-full md:w-auto">
-          <img
-            src={customerInfo?.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
-            alt="Profile"
-            className="w-24 h-24 rounded-full border-4 border-zinc-800 object-cover"
-          />
+          <div 
+            className={`relative group cursor-pointer ${isUploading ? 'opacity-70 pointer-events-none' : ''}`} 
+            onClick={() => !isUploading && fileInputRef.current?.click()}
+          >
+            <img
+              src={customerInfo?.imageUrl || "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"}
+              alt="Profile"
+              className="w-24 h-24 rounded-full border-4 border-zinc-800 object-cover transition-all group-hover:brightness-50"
+            />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              {isUploading ? (
+                <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera className="w-8 h-8 text-white" />
+              )}
+            </div>
+            {isUploading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-full">
+                <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleProfileImageUpload} 
+              className="hidden" 
+              accept="image/*" 
+            />
+          </div>
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">Hej, {customerInfo?.name || "Kunde"}</h1>
             <div className="flex flex-col gap-2 items-start">
@@ -449,6 +529,7 @@ export default function Dashboard() {
               <PrivateChat 
                 customerId={customerCode} 
                 customerName={customerInfo.name} 
+                customerEmail={customerInfo.email}
                 isAdminMode={false} 
               />
             </div>
