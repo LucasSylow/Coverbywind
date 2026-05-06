@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon, LogOut, MessageSquare, Camera } from "lucide-react";
+import { User, Clock, CheckCircle2, XCircle, Plus, Send, Image as ImageIcon, LogOut, MessageSquare, Camera, Zap } from "lucide-react";
 import { db, auth, handleFirestoreError } from "../firebase";
 import { collection, doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
@@ -163,6 +163,7 @@ export default function Dashboard() {
     email: "",
     ideas: "",
     link: "",
+    deliveryType: "Standard" as "Standard" | "Priority"
   });
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState("");
@@ -222,6 +223,10 @@ export default function Dashboard() {
     try {
       const orderId = `CBW-${Math.floor(10000 + Math.random() * 90000)}`;
       const status: Status = customerInfo?.type === "regular" ? "Afventer betaling" : "Afventer";
+      const price = customerInfo?.type === "regular" 
+        ? (newOrder.deliveryType === "Priority" ? 450 : 300)
+        : 0;
+
       await setDoc(doc(db, `customers/${code}/orders`, orderId), {
         artist: newOrder.artist,
         track: newOrder.track,
@@ -232,6 +237,8 @@ export default function Dashboard() {
         ideas: newOrder.ideas,
         link: newOrder.link,
         customerType: customerInfo?.type || "annual",
+        deliveryType: newOrder.deliveryType,
+        price: price,
         priceAccepted: customerInfo?.type === "regular" ? true : false
       });
       
@@ -258,7 +265,7 @@ export default function Dashboard() {
         console.warn("No email found for order notification");
       }
       
-      setNewOrder({ artist: "", track: "", email: "", ideas: "", link: "" });
+      setNewOrder({ artist: "", track: "", email: "", ideas: "", link: "", deliveryType: "Standard" });
       setPriceAccepted(false);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
@@ -631,9 +638,34 @@ export default function Dashboard() {
 
               {customerInfo?.type === "regular" && (
                 <div className="mt-2 space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium text-zinc-300">Vælg leveringstype *</label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setNewOrder({ ...newOrder, deliveryType: "Standard" })}
+                        className={`p-4 rounded-xl border text-left transition-all ${newOrder.deliveryType === 'Standard' ? 'border-purple-500 bg-purple-500/10' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'}`}
+                      >
+                        <p className="text-white font-bold text-sm">Standard</p>
+                        <p className="text-zinc-500 text-xs mt-1">300 kr. • 5 hverdage</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewOrder({ ...newOrder, deliveryType: "Priority" })}
+                        className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden ${newOrder.deliveryType === 'Priority' ? 'border-purple-500 bg-purple-500/10' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-white font-bold text-sm">Priority</p>
+                          <Zap className={`w-3 h-3 ${newOrder.deliveryType === 'Priority' ? 'text-purple-400 fill-purple-400' : 'text-zinc-600'}`} />
+                        </div>
+                        <p className="text-zinc-500 text-xs mt-1">450 kr. • 2 hverdage</p>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                    <p className="text-purple-300 text-sm font-medium mb-1">Pris for cover design</p>
-                    <p className="text-2xl font-bold text-white">499 kr.</p>
+                    <p className="text-purple-300 text-sm font-medium mb-1">Total pris for {newOrder.deliveryType} levering</p>
+                    <p className="text-2xl font-bold text-white">{newOrder.deliveryType === "Priority" ? "450" : "300"} kr.</p>
                     <p className="text-zinc-400 text-xs mt-2 italic">
                       Kontakt os venligst via chatten nedenfor for at aftale betaling, før din ordre kan godkendes og påbegyndes.
                     </p>
@@ -650,7 +682,7 @@ export default function Dashboard() {
                       />
                     </div>
                     <span className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors">
-                      Jeg accepterer prisen på 499 kr. og forstår at arbejdet først påbegyndes efter betaling.
+                      Jeg accepterer prisen på {newOrder.deliveryType === "Priority" ? "450" : "300"} kr. og forstår at arbejdet først påbegyndes efter betaling.
                     </span>
                   </label>
                 </div>

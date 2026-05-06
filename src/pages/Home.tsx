@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "motion/react";
-import { ArrowRight, Shield, Zap, RefreshCw, Star } from "lucide-react";
+import { ArrowRight, Shield, Zap, RefreshCw, Star, UserPlus, Palette, CreditCard, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const reviews = [
@@ -127,6 +127,43 @@ export default function Home() {
         />
       </div>
 
+      {/* Order Flow Section */}
+      <div className="w-full max-w-5xl relative z-10 mb-40 px-4">
+        <div className="flex flex-col items-center mb-16">
+          <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 text-center italic uppercase tracking-wider">
+            Hvordan fungerer det?
+          </h2>
+          <div className="h-1 w-24 bg-purple-600 rounded-full" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
+          <FlowStep 
+            number="01"
+            icon={<UserPlus className="w-8 h-8 text-purple-400" />}
+            title="Opret Profil"
+            description="Log ind eller opret en profil for at få adgang til din personlige kundeside."
+          />
+          <FlowStep 
+            number="02"
+            icon={<Palette className="w-8 h-8 text-purple-400" />}
+            title="Bestil Cover"
+            description="Udfyld formularen med informationer om dit cover, sang m.m."
+          />
+          <FlowStep 
+            number="03"
+            icon={<CreditCard className="w-8 h-8 text-purple-400" />}
+            title="Betaling"
+            description="Du betaler den aftalte pris, jeg bekræfter over chatten på kundesiden"
+          />
+          <FlowStep 
+            number="04"
+            icon={<Download className="w-8 h-8 text-purple-400" />}
+            title="Levering"
+            description="Modtag dit færdige cover art direkte på siden, klar til udgivelse."
+          />
+        </div>
+      </div>
+
       {/* Cases Section */}
       <div className="w-full max-w-5xl relative z-10 flex flex-col items-center">
         <h2 className="text-3xl md:text-4xl font-bold text-white mb-12 text-center">
@@ -185,6 +222,29 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+function FlowStep({ number, icon, title, description }: { number: string; icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      className="flex flex-col items-center text-center group relative"
+    >
+      <div className="mb-6 relative">
+        <div className="w-20 h-20 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center relative z-10 group-hover:border-purple-500/50 transition-colors shadow-xl">
+          {icon}
+        </div>
+        <div className="absolute -top-4 -right-4 w-12 h-12 bg-[#0a0a0a] border border-zinc-800 rounded-2xl flex items-center justify-center z-20 shadow-lg group-hover:border-purple-500/30 transition-colors">
+          <span className="text-purple-400 font-bold text-sm">{number}</span>
+        </div>
+        <div className="absolute inset-0 bg-purple-500/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+      <h3 className="text-xl font-bold text-white mb-3 italic tracking-wide uppercase">{title}</h3>
+      <p className="text-zinc-400 text-sm leading-relaxed max-w-[240px]">{description}</p>
+    </motion.div>
   );
 }
 

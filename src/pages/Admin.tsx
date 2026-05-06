@@ -59,6 +59,8 @@ interface Order {
   imageUrl?: string;
   downloadUrl?: string;
   customerType?: "annual" | "regular";
+  deliveryType?: "Standard" | "Priority";
+  price?: number;
   priceAccepted?: boolean;
 }
 
@@ -148,6 +150,8 @@ export default function Admin() {
                     imageUrl: orderData.imageUrl || "",
                     downloadUrl: orderData.downloadUrl || "",
                     customerType: orderData.customerType || customer.type,
+                    deliveryType: orderData.deliveryType || "Standard",
+                    price: orderData.price || 0,
                     priceAccepted: orderData.priceAccepted || false,
                   });
                 });
@@ -534,8 +538,8 @@ export default function Admin() {
                 className={`bg-[#111111] border ${order.customerType === "regular" ? "border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)]" : "border-zinc-800/80"} rounded-[1.5rem] p-5 shadow-lg relative overflow-hidden`}
               >
                 {order.customerType === "regular" && (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-amber-500 text-black text-[10px] font-bold uppercase rounded-bl-xl tracking-tighter">
-                    Standard (Pay-per-order)
+                  <div className={`absolute top-0 right-0 px-3 py-1 text-black text-[10px] font-bold uppercase rounded-bl-xl tracking-tighter ${order.deliveryType === 'Priority' ? 'bg-purple-500' : 'bg-amber-500'}`}>
+                    {order.deliveryType === 'Priority' ? 'Priority' : 'Standard'} (Pay-per-order)
                   </div>
                 )}
                 <div className="flex justify-between items-start mb-2">
@@ -561,9 +565,9 @@ export default function Admin() {
                   <div>Dato: {order.date}</div>
                   {order.customerType === "regular" && (
                     <div className="mt-1 pt-1 flex items-center gap-2">
-                      <span className="text-amber-400 text-xs font-bold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${order.deliveryType === 'Priority' ? 'text-purple-400 bg-purple-400/10 border-purple-400/20' : 'text-amber-400 bg-amber-400/10 border-amber-400/20'}`}>
                         {order.priceAccepted
-                          ? "Pris accepteret (499 kr.)"
+                          ? `Pris accepteret (${order.price || (order.deliveryType === 'Priority' ? 450 : 300)} kr.)`
                           : "Venter på accept"}
                       </span>
                       <span className="text-zinc-500 text-[10px italic]">
@@ -980,6 +984,11 @@ export default function Admin() {
                                   <span className="text-zinc-500 text-sm">
                                     #{order.id}
                                   </span>
+                                  {order.customerType === "regular" && (
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${order.deliveryType === 'Priority' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'bg-amber-500/20 text-amber-500 border border-amber-500/20'}`}>
+                                      {order.deliveryType || 'Standard'}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-zinc-400 text-sm mt-1">
                                   {order.artist} • {order.email} • {order.date}
