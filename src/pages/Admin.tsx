@@ -62,6 +62,7 @@ interface Order {
   deliveryType?: "Standard" | "Priority";
   price?: number;
   priceAccepted?: boolean;
+  statusReason?: string;
 }
 
 interface Customer {
@@ -149,6 +150,7 @@ export default function Admin() {
                     link: orderData.link || "",
                     imageUrl: orderData.imageUrl || "",
                     downloadUrl: orderData.downloadUrl || "",
+                    statusReason: orderData.statusReason || "",
                     customerType: orderData.customerType || customer.type,
                     deliveryType: orderData.deliveryType || "Standard",
                     price: orderData.price || 0,
@@ -178,6 +180,12 @@ export default function Admin() {
   }, []);
 
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState<{
+    customerId: string;
+    orderId: string;
+    track: string;
+  } | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
 
   const [customerUnreadMap, setCustomerUnreadMap] = useState<
     Record<string, boolean>
@@ -328,12 +336,16 @@ export default function Admin() {
     customerId: string,
     orderId: string,
     newStatus: Status,
+    reason?: string,
   ) => {
     try {
       const orderRef = doc(db, `customers/${customerId}/orders`, orderId);
       const updateData: any = { status: newStatus };
       if (newStatus === "I gang") {
         updateData.inProgressAt = Date.now();
+      }
+      if (reason) {
+        updateData.statusReason = reason;
       }
       await updateDoc(orderRef, updateData);
 
@@ -601,13 +613,22 @@ export default function Admin() {
                 </div>
                 <select
                   value={order.status}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const nextStatus = e.target.value as Status;
+                    if (nextStatus === "Annulleret") {
+                      setCancellingOrder({
+                        customerId: order.customerId,
+                        orderId: order.id,
+                        track: order.track,
+                      });
+                      return;
+                    }
                     handleUpdateOrderStatus(
                       order.customerId,
                       order.id,
-                      e.target.value as Status,
-                    )
-                  }
+                      nextStatus,
+                    );
+                  }}
                   className={`w-full px-3 py-2 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                 >
                   <option
@@ -998,13 +1019,22 @@ export default function Admin() {
                               <div className="flex items-center gap-2 shrink-0 flex-wrap">
                                 <select
                                   value={order.status}
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    const nextStatus = e.target.value as Status;
+                                    if (nextStatus === "Annulleret") {
+                                      setCancellingOrder({
+                                        customerId: customer.id,
+                                        orderId: order.id,
+                                        track: order.track,
+                                      });
+                                      return;
+                                    }
                                     handleUpdateOrderStatus(
                                       customer.id,
                                       order.id,
-                                      e.target.value as Status,
-                                    )
-                                  }
+                                      nextStatus,
+                                    );
+                                  }}
                                   className={`px-3 py-1.5 rounded-xl border text-sm font-bold outline-none cursor-pointer appearance-none ${getStatusClass(order.status)}`}
                                 >
                                   <option
@@ -1158,6 +1188,54 @@ export default function Admin() {
         onClose={() => setIsChatOpen(false)}
         onUnreadCountChange={setUnreadCount}
       />
+
+      {/* Cancellation Reason Modal */}
+      {cancellingOrder && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#111111] border border-zinc-800 rounded-[2rem] p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">Annuller Ordre</h3>
+            <p className="text-zinc-400 text-sm mb-6">
+              Indtast en begrundelse for annullering af ordren på{" "}
+              <span className="text-white font-bold">{cancellingOrder.track}</span>.
+              Denne besked vil være synlig for kunden.
+            </p>
+
+            <textarea
+              value={cancellationReason}
+              onChange={(e) => setCancellationReason(e.target.value)}
+              placeholder="Skriv begrundelse her..."
+              className="w-full bg-[#0a0a0a] border border-zinc-800 text-white placeholder-zinc-600 rounded-xl px-4 py-3 focus:outline-none focus:border-red-500 min-h-[120px] mb-6"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setCancellingOrder(null);
+                  setCancellationReason("");
+                }}
+                className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition-colors"
+              >
+                Fortryd
+              </button>
+              <button
+                onClick={() => {
+                  handleUpdateOrderStatus(
+                    cancellingOrder.customerId,
+                    cancellingOrder.orderId,
+                    "Annulleret",
+                    cancellationReason
+                  );
+                  setCancellingOrder(null);
+                  setCancellationReason("");
+                }}
+                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors"
+              >
+                Annuller Ordre
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

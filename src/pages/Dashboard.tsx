@@ -27,6 +27,7 @@ interface Cover {
   date: string;
   imageUrl?: string;
   downloadUrl?: string;
+  statusReason?: string;
   inProgressAt?: number;
 }
 
@@ -131,6 +132,7 @@ export default function Dashboard() {
                   date: data.date || "",
                   imageUrl: data.imageUrl || "",
                   downloadUrl: data.downloadUrl || "",
+                  statusReason: data.statusReason || "",
                   inProgressAt: data.inProgressAt,
                 });
               });
@@ -494,6 +496,15 @@ export default function Dashboard() {
                         </div>
                       </div>
                     )}
+                    {cover.status === 'Annulleret' && cover.statusReason && (
+                      <div className="mt-2 text-red-400/90 text-sm bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-start gap-3">
+                        <XCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
+                        <div>
+                          <p className="font-bold mb-1">Annulleret / Afvist</p>
+                          <p>Begrundelse: {cover.statusReason}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -525,6 +536,11 @@ export default function Dashboard() {
                     <div>
                       <h4 className="text-lg font-bold text-white leading-tight">{cover.track}</h4>
                       <p className="text-zinc-400 text-sm mt-1">{cover.artist} • Dato: {cover.date}</p>
+                      {cover.status === 'Annulleret' && cover.statusReason && (
+                        <p className="text-red-400 text-xs mt-2 italic bg-red-500/10 p-2 rounded-lg border border-red-500/20 max-w-sm">
+                          Begrundelse: {cover.statusReason}
+                        </p>
+                      )}
                       {cover.downloadUrl && (
                         <a href={cover.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg transition-colors">
                           Download Filer
